@@ -187,7 +187,8 @@ huaji1-save-editor/
 ├─ docs/                    开发辅助文档（见下）
 ├─ 使用说明.txt             随 exe 分发的说明书
 ├─ CHANGELOG.md             0.1 ~ 1.0 的完整变更记录
-├─ LICENSE                  MIT
+├─ LICENSE                  MIT（只覆盖本仓库自己写的代码）
+├─ NOTICE.md                授权范围与例外：游戏素材 / 反编译脚本 / 附带的 dll
 └─ README.md
 ```
 
@@ -228,4 +229,5 @@ huaji1-save-editor/
   文档里只记录**我们自己分析得出的结论**。
 * 修改存档有风险（可能损坏存档或触发游戏内的异常），请务必先备份。
   作者不对任何数据丢失或后果负责。
-* 本仓库代码以 MIT 协议开源，欢迎 issue / PR。
+* 本仓库**自己编写的代码**以 [MIT 协议](LICENSE) 开源，欢迎 issue / PR。
+  授权范围与例外（游戏素材、反编译脚本、附带的 dll）见 [`NOTICE.md`](NOTICE.md)。
