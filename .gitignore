@@ -1,0 +1,41 @@
+# 忽略构建产物、运行期临时文件与游戏资产
+__pycache__/
+*.py[cod]
+*.spec
+build/
+dist/
+*.egg-info/
+
+# 运行期生成
+last_save.txt
+selftest_result.txt
+error.log
+
+# 测试用的存档副本
+test_*.ogg
+test_*.ogg.bak
+*.bak
+
+# 游戏资产 / 第三方文件（绝不入库）
+sy.ogg
+sy.ogg.init
+*.rxdata
+Data/
+Audio/
+Graphics/
+Map/
+Save*.rxdata
+*.exe
+!XJCodec32.exe
+*.dll
+
+# 反编译出来的游戏脚本单独放私有库存，主仓库不引用
+Try/
+scripts/
+_all_scripts.rb
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
