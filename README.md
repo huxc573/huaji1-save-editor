@@ -65,9 +65,18 @@
 
 ## 下载与使用
 
-1. 到 [Releases](../../releases) 下载 `画迹1存档工具v1.0.exe` 和 `XJCodec32.exe`；
-2. 把这两个文件、以及游戏目录里的 **`TP.dll` / `Socket.dll`** 放到同一个文件夹
-   （Release 页也附了这两个 dll 方便直接取用；它们版权归游戏原作者）；
+1. 到 [Releases](../../releases/latest) 下载全部 5 个附件：
+
+   | 下载文件名（ASCII） | 页面显示名 | 说明 |
+   |---|---|---|
+   | `huaji1-save-editor-v1.0.exe` | 画迹1存档工具v1.0.exe | 主程序 |
+   | `XJCodec32.exe` | XJCodec32.exe | 必需的 32 位加解密宿主 |
+   | `TP.dll` / `Socket.dll` | 同名 | 游戏自带库（版权归游戏原作者），也可从自己游戏根目录复制 |
+   | `USAGE.txt` | 使用说明.txt | 中文说明书 |
+
+   > Release 附件的**文件名只能是 ASCII**（GitHub 会把非 ASCII 字符剔掉，
+   > 中文名放在页面的 Label 一列）。下载后改名不影响使用。
+2. 把这 5 个文件放到同一个文件夹；
 3. 先**自己备份**一份 `Audio\BGM\sy.ogg`；
 4. **退出游戏**，双击 exe → 【选择存档…】选中 `Audio\BGM\sy.ogg`；
 5. 改完点【保存修改(Ctrl+S)】→ 进游戏确认。
