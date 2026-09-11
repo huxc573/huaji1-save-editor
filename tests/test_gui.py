@@ -34,6 +34,36 @@ DLL_DIR = GAME if os.path.exists(os.path.join(GAME, 'TP.dll')) else HERE
 def main():
     root = tk.Tk()
     root.withdraw()
+    # 把输出抓一份，最后统计"失败"行 —— 否则界面回归时也只会打印"通过"
+    import io as _io
+    _buf = _io.StringIO()
+    _real = sys.stdout
+
+    class _Tee(object):
+        def write(self, s):
+            _real.write(s)
+            _buf.write(s)
+
+        def flush(self):
+            _real.flush()
+
+    sys.stdout = _Tee()
+    try:
+        rc = _run(root)
+    finally:
+        sys.stdout = _real
+    bad = [ln.strip() for ln in _buf.getvalue().splitlines()
+           if '失败' in ln and '失败：' not in ln and '没被改' not in ln]
+    bad += [ln.strip() for ln in _buf.getvalue().splitlines() if '克隆校验：失败' in ln]
+    if bad:
+        print('界面冒烟测试有失败项：')
+        for ln in bad:
+            print('   %s' % ln)
+    print('===== 界面冒烟测试：%s =====' % ('通过' if not bad else '有失败'))
+    return 0 if not bad else 1
+
+
+def _run(root):
     app = V.App(root, save_path=SAVE)
     root.update()
     # 界面是延时自动加载的（root.after(300, …)），这里直接同步加载一次；
@@ -146,6 +176,81 @@ def main():
             app.skill_del()
             root.update()
             print('忘掉第一个后：技能 %d 个' % len(app.tv_skill.get_children()))
+        # ---- 1.3：克隆技能（弹窗 -> 自动点【克隆】）----
+        # 教训：克隆按钮曾经因为 xj_viewer 里裸用 tk.（NameError）而"点了没反应"，
+        # 因为 Tk 回调的异常在 --windowed 的 exe 里是静默的。这里守住这两点。
+        print('Tk 回调异常钩子已装：%s'
+              % (root.report_callback_exception.__name__
+                 if callable(root.report_callback_exception) else '没有'))
+        # 对话框默认选的是"技能最多的那个"（rows 按 -技能数 排序后取第 0 项），
+        # 测试要按**同一个规则**算期望值，否则比错了对象会误报
+        cand = sorted([r for r in doc.actor_rows() if r['id'] != pet_id],
+                      key=lambda r: (-len(r['skills']), r['id']))
+        src_id = cand[0]['id'] if cand else None
+        if src_id is not None:
+            n_src = len(cand[0]['skills'])
+            hits = []
+            tk_errors = []
+            old_hook = root.report_callback_exception
+
+            def _catch(*a):
+                tk_errors.append(a[1] if len(a) > 1 else a)
+                print('   Tk 回调异常：%s' % (a[1] if len(a) > 1 else a))
+
+            root.report_callback_exception = _catch
+
+            def _click(btn):
+                """模拟**真实点击**（Press+Release）。
+
+                只调 .invoke() 是绕过 ttk 绑定脚本的 —— 而
+                「点了没反应 / bad window path name」这类问题恰恰出在绑定脚本里：
+                ttk::button::Release 调完 -command 之后还会去操作按钮，
+                窗口若在回调里被同步销毁就炸。所以这里必须走事件。
+                """
+                btn.event_generate('<ButtonPress-1>', x=4, y=4)
+                btn.event_generate('<ButtonRelease-1>', x=4, y=4)
+
+            def _poke(w):
+                for ch in w.winfo_children():
+                    try:
+                        if ch.cget('text') == '克隆':
+                            hits.append('克隆')
+                            _click(ch)
+                    except Exception:
+                        pass
+                    _poke(ch)
+
+            def _find_and_click():
+                for w in root.winfo_children():
+                    if isinstance(w, tk.Toplevel) and w.title() == '克隆技能':
+                        hits.append('窗口')
+                        _poke(w)
+
+            root.after(400, _find_and_click)
+            before_src = [x[0] for x in doc.actor_skills(src_id)]
+            app.skill_clone()
+            root.update()
+            root.report_callback_exception = old_hook
+            fails = []
+            got = [int(app.tv_skill.item(i, 'values')[0])
+                   for i in app.tv_skill.get_children()]
+            want = sorted([x[0] for x in doc.actor_skills(src_id)])
+            print('克隆：源 %s（%d 个）-> 目标 %s 现在 %d 个；窗口=%s'
+                  % (src_id, n_src, pet_id, len(got),
+                     '弹出来了' if '窗口' in hits else '没弹出来'))
+            if '窗口' not in hits:
+                fails.append('对话框没弹出来')
+            if sorted(got) != want:
+                fails.append('克隆结果不对 %s' % got[:8])
+            if any(isinstance(w, tk.Toplevel) and w.title() == '克隆技能'
+                   for w in root.winfo_children()):
+                fails.append('点【克隆】后窗口没关')
+            if tk_errors:
+                fails.append('点击过程有 Tk 回调异常 %s' % tk_errors)
+            if [x[0] for x in doc.actor_skills(src_id)] != before_src:
+                fails.append('源角色技能被改了')
+            print('克隆校验：%s' % ('OK' if not fails else '失败：%s' % fails))
+            print('状态栏：%s' % app.var_status.get())
         # 改资质
         app.pet_vars['@攻击资质'].set('4000')
         app.apply_actor()
@@ -254,7 +359,6 @@ def main():
     print('标题：%s' % app.root.title())
     print('版本：%s' % V.VERSION)
     root.destroy()
-    print('===== 界面冒烟测试：通过 =====')
     return 0
 
 if __name__ == '__main__':

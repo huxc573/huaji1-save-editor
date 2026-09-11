@@ -16,6 +16,7 @@
 """
 import os
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -215,6 +216,9 @@ class App(object):
         self.tk = tk
         self.ttk = ttk
         self.root = root
+        # ★ Tk 回调里未捕获的异常默认只往 stderr 打一行 —— --windowed 的 exe
+        #   没有控制台，于是“按钮点了没反应”。这里换成：写 error.log + 弹窗。
+        root.report_callback_exception = self._tk_exception
         self.bridge = None
         self.doc = None
         self.node_of_item = {}
@@ -709,6 +713,30 @@ class App(object):
                        anchor='w').pack(fill='x', side='bottom')
 
     # ================= 基础 =================
+    def _tk_exception(self, exc, val, tb):
+        """Tk 回调里未捕获的异常：写日志 + 弹窗（不然在 exe 里就是“没反应”）。"""
+        import traceback
+        from tkinter import messagebox
+        text = ''.join(traceback.format_exception(exc, val, tb))
+        try:
+            with open(os.path.join(C.app_dir(), 'error.log'), 'a',
+                      encoding='utf-8') as f:
+                f.write('\n===== %s =====\n%s'
+                        % (time.strftime('%Y-%m-%d %H:%M:%S'), text))
+        except OSError:
+            pass
+        try:
+            messagebox.showerror(
+                '出错',
+                '%s: %s\n\n（详细信息已写入程序目录的 error.log）'
+                % (getattr(exc, '__name__', exc), val), parent=self.root)
+        except Exception:
+            pass
+        try:
+            self.set_status('出错：%s（详见 error.log）' % val)
+        except Exception:
+            pass
+
     def set_status(self, s):
         self.var_status.set(s)
         try:
@@ -1630,6 +1658,8 @@ class App(object):
         用途：新抓的宝宝想直接拥有主宠那套技能，不用一个个手点。
         源不受影响；目标原来的技能表会被**整表替换**。
         """
+        tk, ttk = self.tk, self.ttk        # ★ 本文件的 tk/ttk 是 self 上的属性，
+                                           #   不先取出来就会 NameError（而且被 Tk 吞掉）
         aid = self.current_actor_id()
         if aid is None or not self.doc:
             self.err('请先在召唤兽表里选中一只召唤兽')
@@ -1667,14 +1697,33 @@ class App(object):
         bar.pack(fill='x', padx=10, pady=10)
         picked = {}
 
+        def close():
+            """
+            关窗**必须延后到 idle**，不能在按钮自己的回调里同步 destroy()。
+
+            ttk 的按钮绑定脚本（ttk::button::Release）在调用完 -command 之后
+            还会继续操作这个按钮（复位 pressed/default 状态），
+            窗口已经没了就会抛
+                TclError: bad window path name ".!toplevel.!frame.!button"
+            （用户实测：点【克隆】就弹这个错，窗口看起来"没反应"）。
+            用 .invoke() 直接调命令不会走绑定脚本，所以测试里要模拟真实点击才抓得到。
+            """
+            try:
+                win.after_idle(win.destroy)
+            except Exception:
+                pass
+
         def ok():
-            picked['i'] = labels.index(var.get())
-            win.destroy()
+            try:
+                picked['i'] = labels.index(var.get())
+            except ValueError:
+                return                      # 下拉里没有选中项，什么都不做
+            close()
 
         ttk.Button(bar, text='克隆', command=ok).pack(side='right')
-        ttk.Button(bar, text='取消', command=win.destroy).pack(side='right', padx=6)
+        ttk.Button(bar, text='取消', command=close).pack(side='right', padx=6)
         win.bind('<Return>', lambda e: ok())
-        win.bind('<Escape>', lambda e: win.destroy())
+        win.bind('<Escape>', lambda e: close())
         cb.focus_set()
         win.grab_set()
         self.root.wait_window(win)

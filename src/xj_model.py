@@ -26,7 +26,7 @@ except Exception:                           # pragma: no cover
 
 # 项目元信息（界面、文档、打包都用它，只维护这一处）
 APP_NAME = '画迹1：落日情缘 存档工具'
-APP_VERSION = '1.3'
+APP_VERSION = '1.3.1'
 AUTHOR = 'huxc573'
 HOMEPAGE = 'https://github.com/huxc573/huaji1-save-editor'
 LICENSE_NAME = 'MIT License'
@@ -416,7 +416,16 @@ CHANGELOG = ("""【画迹1：落日情缘】存档工具 —— 更新日志
 版本规则：0.1 ~ 0.7 是开发期迭代，v1.0 首次公开发布，v1.1~v1.2 修 bug，v1.3 起加功能
 ================================================================
 
-""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.3  2026-09-11  （新功能：召唤兽技能克隆）
+""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.3.1 2026-09-12 （修：点【克隆技能…】报 bad window path name）
+----------------------------------------------------------------
+* 对话框的按钮不能在自己的回调里同步 destroy()：ttk 的按钮绑定脚本
+  调完 -command 后还会去操作这个按钮（复位 pressed 等），窗口没了就报
+    TclError: bad window path name ".!toplevel.!frame.!button"
+  现在一律用 win.after_idle(win.destroy) 延后销毁。
+* 界面测试改成模拟真实点击（Press+Release），并断言没有 Tk 回调异常
+  —— 只调 button.invoke() 是绕过绑定脚本的，抓不到这类问题。
+
+""" + """1.3  2026-09-11  （新功能：召唤兽技能克隆）
 ----------------------------------------------------------------
 [新] 【克隆技能…】：把另一个角色/召唤兽的**整张技能表**复制到当前这只。
   * 用途：新抓的宝宝想直接拥有主宠那套技能，不用一个个手点。
