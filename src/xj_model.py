@@ -26,7 +26,7 @@ except Exception:                           # pragma: no cover
 
 # 项目元信息（界面、文档、打包都用它，只维护这一处）
 APP_NAME = '画迹1：落日情缘 存档工具'
-APP_VERSION = '1.1'
+APP_VERSION = '1.2'
 AUTHOR = 'huxc573'
 HOMEPAGE = 'https://github.com/huxc573/huaji1-save-editor'
 LICENSE_NAME = 'MIT License'
@@ -413,10 +413,21 @@ CHANGELOG = ("""【画迹1：落日情缘】存档工具 —— 更新日志
 ================================================================
 作者 %s　·　开源地址 %s　·　%s
 反馈：%s
-版本规则：0.1 ~ 0.7 是开发期迭代，v1.0 是首次公开发布，v1.1 修 bug
+版本规则：0.1 ~ 0.7 是开发期迭代，v1.0 是首次公开发布，v1.1/v1.2 修 bug、加功能
 ================================================================
 
-""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.1  2026-09-11  （修 bug：改金钱报错、改名/改技能失效、负数被改坏）
+""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.2  2026-09-11  （修召唤兽列不全 + 技能表加“技能描述”列）
+----------------------------------------------------------------
+[1] 召唤兽少了一只（游戏里能看到，工具列表里没有）
+  * 根因：$game_actors.@data[槽位] 可能是 **'@N' 对象链接**，不是真的对象。
+    实测：@data[165] = '@62'，而那个真正的 Game_Actor(@actor_id=165)
+    嵌在 @data[12].@who_attack_me.@who_attack_me 里。
+    游戏能正常显示，而工具只认 ObjNode，于是那只召唤兽被当成不存在。
+  * 现在 actors() 会自动解引用 '@N'，列表与游戏界面一致。
+[2] 召唤兽技能表新增“技能描述”列（技能名右边，可横向滚动）
+  * 取自 Data/Skills.rxdata 的 @description；“搜索技能”也会匹配描述。
+
+""" + """1.1  2026-09-11  （修 bug：改金钱报错、改名/改技能失效、负数被改坏）
 ----------------------------------------------------------------
 [1] 改金钱报 MarshalError: 未知类型 't' (0x74)
   * 金钱是 LockNumber 编码（6 组校验值），中间值动辄上亿、要 5 个字节；
@@ -1047,16 +1058,28 @@ class Doc(object):
 
     # ---------------- 角色 ----------------
     def actors(self):
-        """按 @actor_id 聚合：角色在存档里有两份（角色表 / 队伍）。"""
+        """按 @actor_id 聚合：角色在存档里有两份（角色表 / 队伍）。
+
+        ⚠ 数组元素可能是 **'@N' 对象链接**，不是真的对象。真实案例：
+           $game_actors.@data[165] == '@62'，而那个对象就嵌在
+           $game_actors.@data[12].@who_attack_me.@who_attack_me 里
+           —— 目标是个正常的 Game_Actor(@actor_id=165)，游戏能正常显示，
+           但工具以前只认 ObjNode，于是这只召唤兽"消失了"。
+        所以这里要顺带解引用：链接的目标才是那个角色对象。
+        """
         out = {}
         for src, arr_node in (('角色表', self.ivar('game_actors', '@data')),
                               ('队伍', self.ivar('game_party', '@actors'))):
             if not isinstance(arr_node, M.ArrayNode):
                 continue
             for it in arr_node.items:
+                if isinstance(it, M.LinkNode):
+                    it = it.target          # '@N' -> 真正的对象
                 if isinstance(it, M.ObjNode) and it.cls == 'Game_Actor':
                     aid = M.value_of(it.get('@actor_id'))
-                    out.setdefault(aid, []).append((src, it))
+                    pair = (src, it)
+                    if pair not in out.setdefault(aid, []):
+                        out[aid].append(pair)
         return out
 
     def _actor_nodes_sorted(self, aid):
@@ -1736,15 +1759,21 @@ class Doc(object):
     # 游戏脚本 0044：learn_skill -> @skills.push(id); @skills.sort!
     #               forget_skill -> @skills.delete(id)
     def skill_templates(self):
-        """技能模板表（存档里没有它，读游戏 Data/Skills.rxdata）。"""
+        """技能模板表：(id, 名字, 说明)（存档里没有它，读游戏 Data/Skills.rxdata）。"""
         out = []
         arr = self._db('data_skills', 'Skills.rxdata')
         for i, s in enumerate(arr):
             if isinstance(s, M.ObjNode):
                 nm = stext(s.get('@name'), '')
                 if nm:
-                    out.append((i, nm))
+                    out.append((i, nm, self._skill_desc_obj(s)))
         return out
+
+    @staticmethod
+    def _skill_desc_obj(s):
+        """从技能模板对象里取 @description（多行压成一行）。"""
+        d = stext(s.get('@description'), '')
+        return ' '.join(d.split())
 
     def skill_name(self, sid):
         arr = self._db('data_skills', 'Skills.rxdata')
@@ -1755,8 +1784,16 @@ class Doc(object):
                 return nm
         return '技能%d' % sid
 
+    def skill_desc(self, sid):
+        """技能说明（Data/Skills.rxdata 的 @description），没有就空串。"""
+        arr = self._db('data_skills', 'Skills.rxdata')
+        if isinstance(sid, int) and 0 <= sid < len(arr) \
+                and isinstance(arr[sid], M.ObjNode):
+            return self._skill_desc_obj(arr[sid])
+        return ''
+
     def actor_skills(self, aid):
-        """已学技能：[(技能 id, 名字)]。"""
+        """已学技能：[(技能 id, 名字, 说明)]。"""
         obj = self.actor(aid)
         sk = obj.get('@skills') if obj is not None else None
         out = []
@@ -1764,7 +1801,7 @@ class Doc(object):
             for it in sk.items:
                 sid = vof(it)
                 if isinstance(sid, int):
-                    out.append((sid, self.skill_name(sid)))
+                    out.append((sid, self.skill_name(sid), self.skill_desc(sid)))
         return out
 
     def set_actor_skills(self, aid, sids):
@@ -1797,7 +1834,7 @@ class Doc(object):
     def add_actor_skill(self, aid, sid):
         """学会技能（等价于游戏的 learn_skill）：加进 @skills 并保持升序。"""
         sid = int(sid)
-        cur = [x for x, _ in self.actor_skills(aid)]
+        cur = [s[0] for s in self.actor_skills(aid)]
         if sid in cur:
             raise E.EditError('已经有「%s」了' % self.skill_name(sid))
         if not self.set_actor_skills(aid, cur + [sid]):
@@ -1807,7 +1844,7 @@ class Doc(object):
     def remove_actor_skill(self, aid, sid):
         """忘掉技能（等价于游戏的 forget_skill）。"""
         sid = int(sid)
-        cur = [x for x, _ in self.actor_skills(aid)]
+        cur = [s[0] for s in self.actor_skills(aid)]
         if sid not in cur:
             raise E.EditError('没有「%s」这个技能' % self.skill_name(sid))
         self.set_actor_skills(aid, [x for x in cur if x != sid])

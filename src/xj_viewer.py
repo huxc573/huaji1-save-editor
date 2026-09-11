@@ -556,16 +556,24 @@ class App(object):
                    command=self.skill_clear).pack(side='left', padx=6)
         self.lb_skill_info = ttk.Label(skbar, text='', foreground='#888')
         self.lb_skill_info.pack(side='left', padx=6)
-        self.tv_skill = ttk.Treeview(skf, columns=('id', 'name'), show='headings',
-                                     height=6)
+        skbox = ttk.Frame(skf)
+        skbox.pack(fill='both', expand=True)
+        self.tv_skill = ttk.Treeview(skbox, columns=('id', 'name', 'desc'),
+                                     show='headings', height=6)
         self.tv_skill.heading('id', text='技能 id')
         self.tv_skill.heading('name', text='技能名（Data/Skills.rxdata）')
-        self.tv_skill.column('id', width=80, anchor='center')
-        self.tv_skill.column('name', width=300)
-        vsk = ttk.Scrollbar(skf, orient='vertical', command=self.tv_skill.yview)
-        self.tv_skill.configure(yscrollcommand=vsk.set)
-        self.tv_skill.pack(side='left', fill='both', expand=True)
-        vsk.pack(side='left', fill='y')
+        self.tv_skill.heading('desc', text='技能描述')
+        self.tv_skill.column('id', width=70, anchor='center')
+        self.tv_skill.column('name', width=210)
+        self.tv_skill.column('desc', width=430)
+        vsk = ttk.Scrollbar(skbox, orient='vertical', command=self.tv_skill.yview)
+        hsk = ttk.Scrollbar(skbox, orient='horizontal', command=self.tv_skill.xview)
+        self.tv_skill.configure(yscrollcommand=vsk.set, xscrollcommand=hsk.set)
+        self.tv_skill.grid(row=0, column=0, sticky='nsew')
+        vsk.grid(row=0, column=1, sticky='ns')
+        hsk.grid(row=1, column=0, sticky='ew')
+        skbox.rowconfigure(0, weight=1)
+        skbox.columnconfigure(0, weight=1)
         self.show_actor_group()
 
         self.txt_actor.configure(font=('Consolas', 10))
@@ -1464,7 +1472,7 @@ class App(object):
             MOD.vof(a.get('@class_id')) or 0)),
             'HP 上限 %s / SP 上限 %s（按游戏公式计算）'
             % (self.doc.actor_maxhp(aid), self.doc.actor_maxsp(aid)),
-            '已学技能：%s' % ('、'.join(n for _i, n in self.doc.actor_skills(aid))
+            '已学技能：%s' % ('、'.join(s[1] for s in self.doc.actor_skills(aid))
                               or '（无）')]
         for k, v in self.doc.actor_extra(aid):
             t.append('   %-14s %s' % (k, v))
@@ -1580,8 +1588,10 @@ class App(object):
         except Exception:
             pass
         out = []
-        for i, n in getattr(self, '_skill_tpls', []):
-            if not kw or kw in n.lower() or kw == str(i):
+        for t in getattr(self, '_skill_tpls', []):
+            i, n = t[0], t[1]
+            d = t[2] if len(t) > 2 else ''      # 技能描述（也参与搜索）
+            if not kw or kw in n.lower() or kw in d.lower() or kw == str(i):
                 out.append('%d | %s' % (i, n))
         try:
             self.cb_skill['values'] = out[:500]
@@ -1602,8 +1612,8 @@ class App(object):
             aid = self.current_actor_id()
         if aid is None:
             return
-        for sid, name in self.doc.actor_skills(aid):
-            self.tv_skill.insert('', 'end', values=(sid, name))
+        for sid, name, desc in self.doc.actor_skills(aid):
+            self.tv_skill.insert('', 'end', values=(sid, name, desc))
 
     def skill_add(self):
         aid = self.current_actor_id()

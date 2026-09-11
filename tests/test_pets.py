@@ -100,6 +100,14 @@ def main():
           all(r['owner'] is not None and isinstance(r['tpl'], int) for r in rows))
     check('每个人物的 @babys 都指向存在的对象', not (set(expect) - set(doc.actors())))
 
+    # 真实案例：$game_actors.@data[165] 是 '@N' 链接（真正的对象嵌在
+    # $game_actors.@data[12].@who_attack_me.@who_attack_me 里），
+    # 以前只认 ObjNode，那只召唤兽就在列表里消失了
+    listed = set(r['id'] for r in doc.actors_pet(include_unowned=True))
+    missing = sorted(set(expect) - listed)
+    check("@babys 里的槽位都能列出来（含 '@N' 链接的）", not missing,
+          '缺 %s' % missing if missing else '%d 个槽位全在' % len(expect))
+
     print('')
     print('=' * 68)
     print('2) 改名（@new_name）')
@@ -170,7 +178,7 @@ def main():
     print('  技能与其它字段没被连带改坏：')
     sk_before = doc2.actor_skills(pid)
     check('召唤兽技能还在', len(sk_before) > 0, str(sk_before))
-    check('技能名能读出来', all(n and n != '?' for _i, n in sk_before))
+    check('技能名能读出来', all(s[1] and s[1] != '?' for s in sk_before))
 
     print('')
     print('=' * 68)

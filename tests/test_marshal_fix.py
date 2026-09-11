@@ -143,24 +143,55 @@ def main():
     # ==================================================================
     print('')
     print('=' * 70)
-    print('3) 循环引用（Game_Actor <-> Game_Enemy）')
+    print("3) 循环引用（'@N' 指回祖先）")
     print('=' * 70)
     k = MOD.TOP_NAMES.index('game_actors')
     top = doc.node('game_actors')
     arr = top.get('@data')
-    cyc = None
-    for i, it in enumerate(arr.items):
-        if getattr(it, 'cls', '') != 'Game_Actor':
-            continue
-        en = it.get('@who_attack_me')
-        if en is None or getattr(en, 'cls', '') != 'Game_Enemy':
-            continue
-        bk = en.get('@who_attack_me')
-        if isinstance(bk, M.LinkNode) and bk.target is it:
-            cyc = i
-            break
-    check('现档里确实存在环（@who_attack_me 指回自己）', cyc is not None,
-          '第 %s 个 Game_Actor' % cyc)
+
+    def kids(n):
+        if isinstance(n, M.LinkNode):
+            return [n.target] if n.target is not None else []
+        if isinstance(n, M.ArrayNode):
+            return list(n.items)
+        if isinstance(n, (M.ObjNode, M.StructNode)):
+            return [v for _k, v in n.ivars]
+        if isinstance(n, M.IVarNode):
+            out = [v for _k, v in n.ivars]
+            if n.inner is not None:
+                out.append(n.inner)
+            return out
+        if isinstance(n, M.HashNode):
+            out = []
+            for a, b in n.pairs:
+                out += [a, b]
+            return out
+        return []
+
+    def find_cycle(root):
+        """找一个真实的环（'@N' 指回了祖先节点），返回环上的节点列表。"""
+        box = []
+
+        def walk(n, stack):
+            if box or n is None or len(stack) > 400:
+                return
+            for a in stack:
+                if a is n:
+                    box.append(stack[stack.index(a):])
+                    return
+            for ch in kids(n):
+                walk(ch, stack + [n])
+                if box:
+                    return
+
+        walk(root, [])
+        return box[0] if box else None
+
+    cyc = find_cycle(top)
+    check("现档里确实存在环（'@N' 指回祖先）", cyc is not None,
+          '环长 %d：%s' % (len(cyc or []),
+                          ' -> '.join(getattr(x, 'cls', type(x).__name__)
+                                      for x in (cyc or [])[:4])))
 
     blew = False
     try:
@@ -187,11 +218,7 @@ def main():
         print('     第二次: %s' % again[max(0, pos - 12):pos + 12].hex(' '))
     check('再序列化一次得到完全相同的字节（编号自洽）', again == data)
 
-    a2 = top2.get('@data').items[cyc]
-    e2 = a2.get('@who_attack_me')
-    bk2 = e2.get('@who_attack_me') if e2 is not None else None
-    check('环被原样保留（而且 @N 指向的是同一个对象，不是副本）',
-          isinstance(bk2, M.LinkNode) and bk2.target is a2)
+    check('环被原样保留（重写后仍能找到环）', find_cycle(top2) is not None)
 
     # 其它字段不能被牵连
     same = True

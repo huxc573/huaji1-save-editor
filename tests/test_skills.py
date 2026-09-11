@@ -45,7 +45,8 @@ def snap_pets(doc):
     """召唤兽/人物的等级+技能，用于确认只改了目标对象。"""
     out = {}
     for r in doc.actor_rows():
-        out[r['id']] = (r['name'], r['level'], tuple(x for x, _ in r['skills']))
+        out[r['id']] = (r['name'], r['level'],
+                        tuple(x[0] for x in r['skills']))
     return out
 
 
@@ -59,6 +60,14 @@ def main():
     tpls = doc.skill_templates()
     check('能找到技能模板表（Data/Skills.rxdata）', len(tpls) > 50,
           '%d 个技能，例：%s' % (len(tpls), tpls[:3]))
+    check('技能模板带说明文字（@description）',
+          sum(1 for t in tpls if len(t) > 2 and t[2]) > 50,
+          '有说明的 %d / %d' % (sum(1 for t in tpls if len(t) > 2 and t[2]),
+                               len(tpls)))
+    demo = next((t for t in tpls if t[2]), None)
+    check('doc.skill_desc() 能单独查到说明',
+          bool(demo and doc.skill_desc(demo[0])),
+          ('%s -> %s' % (demo[1], doc.skill_desc(demo[0])[:28])) if demo else '无带说明的技能')
     check('_data_file 能找到 Data 目录（存档在 Audio/BGM 下）',
           doc._data_file('Skills.rxdata') is not None,
           str(doc._data_file('Skills.rxdata')))
@@ -84,12 +93,12 @@ def main():
 
     before = snap_pets(doc)
     pid = pet['id']
-    old = [x for x, _ in pet['skills']]
+    old = [x[0] for x in pet['skills']]
 
     # ---------- 3. 增加技能 ----------
-    new_id = next(i for i, _n in tpls if i not in old)
+    new_id = next(t[0] for t in tpls if t[0] not in old)
     doc.add_actor_skill(pid, new_id)
-    after_add = [x for x, _ in doc.actor_skills(pid)]
+    after_add = [x[0] for x in doc.actor_skills(pid)]
     check('增加技能成功（保持升序）',
           new_id in after_add and after_add == sorted(after_add),
           '新增 %d(%s) -> %s' % (new_id, doc.skill_name(new_id), after_add))
@@ -101,7 +110,7 @@ def main():
 
     # ---------- 4. 删除技能 ----------
     doc.remove_actor_skill(pid, old[0])
-    after_del = [x for x, _ in doc.actor_skills(pid)]
+    after_del = [x[0] for x in doc.actor_skills(pid)]
     check('删除技能成功', old[0] not in after_del,
           '删了 %d(%s) -> %s' % (old[0], doc.skill_name(old[0]), after_del))
 
@@ -116,7 +125,7 @@ def main():
     # ---------- 6. 保存 -> 读回 ----------
     doc.save(backup=False)
     doc2 = MOD.Doc(TMP, bridge, log.append)
-    got = [x for x, _ in doc2.actor_skills(pid)]
+    got = [x[0] for x in doc2.actor_skills(pid)]
     check('保存后技能列表正确', got == after_del, '%s' % got)
     check('保存后顶层对象数仍为 19', len(doc2.entries) == 19, '%d' % len(doc2.entries))
     check('保存后其它对象仍然一致',
@@ -128,7 +137,7 @@ def main():
     doc2.save(backup=False)
     doc3 = MOD.Doc(TMP, bridge, log.append)
     check('人物也能加技能并保存',
-          new_id in [x for x, _ in doc3.actor_skills(person['id'])],
+          new_id in [x[0] for x in doc3.actor_skills(person['id'])],
           '%s：%s' % (person['name'], doc3.actor_skills(person['id'])))
 
     # ---------- 8. 批量设置（清空再恢复）----------
@@ -136,8 +145,8 @@ def main():
     check('可以批量设置（清空）', doc3.actor_skills(pid) == [],
           '%s' % doc3.actor_skills(pid))
     doc3.set_actor_skills(pid, after_del)
-    check('再恢复回来', [x for x, _ in doc3.actor_skills(pid)] == after_del,
-          '%s' % [x for x, _ in doc3.actor_skills(pid)])
+    check('再恢复回来', [x[0] for x in doc3.actor_skills(pid)] == after_del,
+          '%s' % [x[0] for x in doc3.actor_skills(pid)])
 
     try:
         os.remove(TMP)

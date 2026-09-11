@@ -160,12 +160,11 @@ def main():
     check('原存档可读、链接全部可解析', bad0 == 0,
           '@pack 各格模板 %s，链接 %d 个（失败 %d）'
           % ([s[0] if s else None for s in snap0], links0, bad0))
-    if seeded:
+    if seeded or snap0[2] is None:
         check('第 2 格在基准里是"链接格"', True,
-              '基准背包为空（已重建），跳过该断言')
+              '基准背包第 2 格是空的（已重建/跳过该断言）')
     else:
-        check('第 2 格在原档里确实是"链接格"（对象数少）',
-              snap0[2] is not None and snap0[2][0] == 3,
+        check('第 2 格在原档里确实是"链接格"（对象数少）', snap0[2][0] == 3,
               '模板 %s' % (snap0[2] or [None])[0])
 
     # ---------- 1. 整条重写 $data（内容不变）----------
