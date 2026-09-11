@@ -554,6 +554,8 @@ class App(object):
                    command=self.skill_del).pack(side='left')
         ttk.Button(skbar, text='清空技能',
                    command=self.skill_clear).pack(side='left', padx=6)
+        ttk.Button(skbar, text='克隆技能…',
+                   command=self.skill_clone).pack(side='left')
         self.lb_skill_info = ttk.Label(skbar, text='', foreground='#888')
         self.lb_skill_info.pack(side='left', padx=6)
         skbox = ttk.Frame(skf)
@@ -1614,6 +1616,82 @@ class App(object):
             return
         for sid, name, desc in self.doc.actor_skills(aid):
             self.tv_skill.insert('', 'end', values=(sid, name, desc))
+
+    @staticmethod
+    def _skill_preview(skills, n=3):
+        """下拉列表里的技能预览：最多列 n 个名字。"""
+        if not skills:
+            return '（无）'
+        return '、'.join(s[1] for s in skills[:n]) + ('…' if len(skills) > n else '')
+
+    def skill_clone(self):
+        """克隆技能：把另一个角色 / 召唤兽的整张技能表复制到当前这只身上。
+
+        用途：新抓的宝宝想直接拥有主宠那套技能，不用一个个手点。
+        源不受影响；目标原来的技能表会被**整表替换**。
+        """
+        aid = self.current_actor_id()
+        if aid is None or not self.doc:
+            self.err('请先在召唤兽表里选中一只召唤兽')
+            return
+        try:
+            rows = [r for r in self.doc.actor_rows() if r['id'] != aid]
+        except Exception as e:
+            self.err(e)
+            return
+        if not rows:
+            self.err('没有别的角色可以克隆')
+            return
+        # 技能多的排前面（一般主宠/主角在最上面），同数量按 id
+        rows.sort(key=lambda r: (-len(r['skills']), r['id']))
+        labels = ['%s %d %s —— %d 个技能：%s'
+                  % ('召唤兽' if r['is_pet'] else '人物', r['id'], r['display'],
+                     len(r['skills']), self._skill_preview(r['skills']))
+                  for r in rows]
+
+        win = tk.Toplevel(self.root)
+        win.title('克隆技能')
+        win.transient(self.root)
+        win.resizable(False, False)
+        ttk.Label(win, justify='left', padding=10,
+                  text='把谁身上的技能克隆给「%s」？\n'
+                       '目标原有的技能表会被整表替换，源不受影响。'
+                       % self.actor_label(aid)).pack(anchor='w')
+        var = tk.StringVar(value=labels[0])
+        cb = ttk.Combobox(win, textvariable=var, values=labels, width=68,
+                          state='readonly')
+        cb.pack(fill='x', padx=10)
+        ttk.Label(win, foreground='#888', padding=(10, 4, 10, 0),
+                  text='克隆后记得点【保存修改(Ctrl+S)】。').pack(anchor='w')
+        bar = ttk.Frame(win)
+        bar.pack(fill='x', padx=10, pady=10)
+        picked = {}
+
+        def ok():
+            picked['i'] = labels.index(var.get())
+            win.destroy()
+
+        ttk.Button(bar, text='克隆', command=ok).pack(side='right')
+        ttk.Button(bar, text='取消', command=win.destroy).pack(side='right', padx=6)
+        win.bind('<Return>', lambda e: ok())
+        win.bind('<Escape>', lambda e: win.destroy())
+        cb.focus_set()
+        win.grab_set()
+        self.root.wait_window(win)
+        if 'i' not in picked:
+            return
+        src = rows[picked['i']]
+        try:
+            sids = self.doc.clone_skills(src['id'], aid)
+            self.mark_dirty()
+            self.fill_skills(aid)
+            self.fill_actors()
+            self.select_actor(aid)
+            self.load_actor_edit()
+            self.set_status('技能克隆：%s → %s（%d 个技能）'
+                            % (src['display'], self.actor_label(aid), len(sids)))
+        except Exception as e:
+            self.err(e)
 
     def skill_add(self):
         aid = self.current_actor_id()

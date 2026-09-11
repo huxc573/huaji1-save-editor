@@ -28,7 +28,7 @@ sys.path.insert(0, SRC)
 
 from xj_env import game_dir as _game_dir                   # noqa: E402
 
-APP_VERSION = '1.2'
+APP_VERSION = '1.3'
 EXE_NAME = '画迹1存档工具v' + APP_VERSION
 EXE_DIR = os.path.join(ROOT, 'dist')
 PY = sys.executable

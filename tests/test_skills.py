@@ -148,6 +148,70 @@ def main():
     check('再恢复回来', [x[0] for x in doc3.actor_skills(pid)] == after_del,
           '%s' % [x[0] for x in doc3.actor_skills(pid)])
 
+    # ---------- 9. 克隆技能（v1.2）----------
+    print('')
+    print('9) 克隆技能：把 A 的整张技能表复制给 B')
+    src = max(doc.actors_pet(include_unowned=True),
+              key=lambda r: len(r['skills']))
+    others = [r for r in doc.actors_pet(include_unowned=True)
+              if r['id'] != src['id']]
+    if not others or not src['skills']:
+        check('克隆技能：本档没有两个可比较的对象', True, '跳过')
+    else:
+        dst = min(others, key=lambda r: len(r['skills']))
+        want = [s[0] for s in src['skills']]
+        dst_before = [s[0] for s in dst['skills']]
+        snap_before = snap_pets(doc)
+        sids = doc.clone_skills(src['id'], dst['id'])
+        check('克隆返回的技能 = 源的技能',
+              sorted(sids) == sorted(set(want)), '%s' % sids)
+        check('目标技能表已变成源那份',
+              [s[0] for s in doc.actor_skills(dst['id'])] == sorted(set(want)),
+              '%s -> %s' % (dst_before, [s[0] for s in doc.actor_skills(dst['id'])]))
+        check('源没被改动', [s[0] for s in doc.actor_skills(src['id'])]
+              == sorted(set(want)))
+        now2 = snap_pets(doc)
+        changed2 = [k for k in snap_before
+                    if k not in (src['id'], dst['id'])
+                    and snap_before[k] != now2[k]]
+        check('其它角色完全没变', not changed2, '变动了 %s' % changed2)
+        check('目标等级/名字没被连带改',
+              snap_before[dst['id']][:2] == now2[dst['id']][:2],
+              '%s' % (now2[dst['id']][:2],))
+
+        # 克隆到"嵌套在别处的对象"（@data[槽位] 是 '@N' 链接）也必须能用
+        nested = None
+        k = MOD.TOP_NAMES.index('game_actors')
+        arr = doc.node('game_actors').get('@data')
+        for i, it in enumerate(arr.items):
+            if isinstance(it, M.LinkNode) and it.target is not None:
+                a = MOD.vof(it.target.get('@actor_id'))
+                if isinstance(a, int) and a > 20 and a != src['id']:
+                    nested = a
+                    break
+        if nested is None:
+            check('克隆到 @N 链接的召唤兽', True, '本档没有这种槽位（跳过）')
+        else:
+            doc.clone_skills(src['id'], nested)
+            check('克隆到 @N 链接的召唤兽（对象嵌在别处）',
+                  [s[0] for s in doc.actor_skills(nested)] == sorted(set(want)),
+                  '槽位 %s' % nested)
+
+        doc.save(backup=False)
+        doc4 = MOD.Doc(TMP, bridge, log.append)
+        check('克隆后保存 -> 读回目标技能正确',
+              [s[0] for s in doc4.actor_skills(dst['id'])] == sorted(set(want)),
+              '%s' % [s[0] for s in doc4.actor_skills(dst['id'])])
+        check('克隆后保存 -> 源技能也没变',
+              [s[0] for s in doc4.actor_skills(src['id'])] == sorted(set(want)))
+        check('克隆后顶层对象数仍为 19', len(doc4.entries) == 19)
+        err = ''
+        try:
+            doc4.clone_skills(dst['id'], dst['id'])
+        except Exception as e:
+            err = str(e)
+        check('源和目标相同时会拒绝', bool(err), err[:40])
+
     try:
         os.remove(TMP)
         if os.path.exists(TMP + '.bak'):

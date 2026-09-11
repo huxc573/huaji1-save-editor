@@ -26,7 +26,7 @@ except Exception:                           # pragma: no cover
 
 # 项目元信息（界面、文档、打包都用它，只维护这一处）
 APP_NAME = '画迹1：落日情缘 存档工具'
-APP_VERSION = '1.2'
+APP_VERSION = '1.3'
 AUTHOR = 'huxc573'
 HOMEPAGE = 'https://github.com/huxc573/huaji1-save-editor'
 LICENSE_NAME = 'MIT License'
@@ -413,10 +413,20 @@ CHANGELOG = ("""【画迹1：落日情缘】存档工具 —— 更新日志
 ================================================================
 作者 %s　·　开源地址 %s　·　%s
 反馈：%s
-版本规则：0.1 ~ 0.7 是开发期迭代，v1.0 是首次公开发布，v1.1/v1.2 修 bug、加功能
+版本规则：0.1 ~ 0.7 是开发期迭代，v1.0 首次公开发布，v1.1~v1.2 修 bug，v1.3 起加功能
 ================================================================
 
-""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.2  2026-09-11  （修召唤兽列不全 + 技能表加“技能描述”列）
+""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.3  2026-09-11  （新功能：召唤兽技能克隆）
+----------------------------------------------------------------
+[新] 【克隆技能…】：把另一个角色/召唤兽的**整张技能表**复制到当前这只。
+  * 用途：新抓的宝宝想直接拥有主宠那套技能，不用一个个手点。
+  * 下拉里能看到每个角色的技能数和前几个技能名，按技能多少排序；
+  * 目标原有的技能表会被整表替换，**源不受影响**；
+  * 目标哪怕是个 "@N" 链接对象（嵌在别处）也能克隆。
+[修] set_actor_skills 现在一律给 @skills 换**新数组**（不原地改 items）——
+  万这个数组是共享对象，原地改会连源一起改掉。
+
+""" + """1.2  2026-09-11  （修召唤兽列不全 + 技能表加“技能描述”列）
 ----------------------------------------------------------------
 [1] 召唤兽少了一只（游戏里能看到，工具列表里没有）
   * 根因：$game_actors.@data[槽位] 可能是 **'@N' 对象链接**，不是真的对象。
@@ -1805,23 +1815,22 @@ class Doc(object):
         return out
 
     def set_actor_skills(self, aid, sids):
-        """改写 @skills（升序、去重），所有副本一起改。返回改了几份。"""
+        """改写 @skills（升序、去重），所有副本一起改。返回改了几份。
+
+        一律把 @skills 换成一个**全新的数组对象**（不原地改 items）：
+        这个数组可能是共享对象（别处也有 '@N' 指着它），原地改会把别人一起改掉。
+        """
         pe = self.begin_edit()
         hit = 0
         vals = sorted(set(int(x) for x in sids))
         for n in self.actor_nodes(aid):
-            sk = n.get('@skills')
             new = M.ArrayNode([M.IntNode(v) for v in vals])
-            if isinstance(sk, M.ArrayNode):
-                sk.items = new.items          # 同步内存树，界面立刻看到
-            elif isinstance(sk, M.LinkNode):
-                # 这个数组是共享对象（'@N'），物化成独立数组
-                for i, (k, _v) in enumerate(n.ivars):
-                    if k == '@skills':
-                        n.ivars[i] = (k, new)
-                        break
+            for i, (k, _v) in enumerate(n.ivars):
+                if k == '@skills':
+                    n.ivars[i] = (k, new)      # 换新数组（'@N' 链接也顺便物化）
+                    break
             else:
-                continue
+                continue                       # 这个对象没有 @skills
             # 整体重写这个 Game_Actor 对象（数组长度变了 + 链接全部展开，编号自洽）。
             # 用 replace_object 而不是 replace_tree，是为了把它登记成"根" ——
             # 否则用户接着改这只宠的等级/资质时会打在更大补丁里面而报错。
@@ -1849,6 +1858,28 @@ class Doc(object):
             raise E.EditError('没有「%s」这个技能' % self.skill_name(sid))
         self.set_actor_skills(aid, [x for x in cur if x != sid])
         return sid
+
+    def clone_skills(self, src_aid, dst_aid):
+        """克隆技能：把 src 的整张 @skills 表复制到 dst（替换 dst 原有的）。
+
+        游戏里学/忘技能就是 `@skills` 数组的增删（0044 learn_skill / forget_skill），
+        所以"克隆"= 整表替换，直接走 set_actor_skills（会置 _actors_dirty，
+        保存时整条重写 $game_actors/$game_party，编号自洽）。
+
+        源不受影响：即使两边的 @skills 恰好是同一个数组对象（'@N' 共享），
+        set_actor_skills 也会给目标换一个**新数组**。
+        返回克隆过去的技能 id 列表。
+        """
+        if src_aid == dst_aid:
+            raise E.EditError('源和目标不能是同一个角色')
+        if not self.actor_nodes(src_aid):
+            raise E.EditError('找不到角色 %s 的对象' % src_aid)
+        if not self.actor_nodes(dst_aid):
+            raise E.EditError('找不到角色 %s 的对象' % dst_aid)
+        sids = [s[0] for s in self.actor_skills(src_aid)]
+        if not self.set_actor_skills(dst_aid, sids):
+            raise E.EditError('「%s」没有 @skills 字段，改不了' % self.actor_name(dst_aid))
+        return sids
 
     # ---- 物品栏 ----
     def item_db_array(self):

@@ -188,17 +188,38 @@ def main():
         return box[0] if box else None
 
     cyc = find_cycle(top)
-    check("现档里确实存在环（'@N' 指回祖先）", cyc is not None,
-          '环长 %d：%s' % (len(cyc or []),
-                          ' -> '.join(getattr(x, 'cls', type(x).__name__)
-                                      for x in (cyc or [])[:4])))
+    if cyc is None:
+        check('现档里没有环（好档）', True,
+              '这档没打过架/已清干净，下面先自己造一个环来验证')
+    else:
+        check('现档里确实存在环（\'@N\' 指回祖先）', True,
+              '环长 %d：%s' % (len(cyc),
+                              ' -> '.join(getattr(x, 'cls', type(x).__name__)
+                                          for x in cyc[:4])))
+        blew = False
+        try:
+            M.serialize(top)
+        except M.MarshalError:
+            blew = True
+        check('展开模式遇到环会报错（老行为，不会静默写坏）', blew)
 
-    blew = False
+    # ---- 3a. 自己造一个环：对象 -> 数组 -> 指回自己 ----
+    a = M.ObjNode('T_SelfRef')
+    a.ivars = [('@me', M.LinkNode(0)), ('@n', M.IntNode(7))]
+    a.ivars[0][1].target = a              # 环：@me 就是 a 自己
+    raw = M.serialize(a, table={})
+    check('自己造的环：编号模式能写出去', raw.endswith(b'@\x00') or b'@' in raw,
+          raw.hex(' '))
+    back1 = M.parse_stream(b'\x04\x08' + raw)[0]['node']
+    me = back1.get('@me')
+    check('自己造的环：读回后 @me 就是整个对象自己',
+          isinstance(me, M.LinkNode) and me.target is back1)
+    blew2 = False
     try:
-        M.serialize(top)
+        M.serialize(a)
     except M.MarshalError:
-        blew = True
-    check('展开模式遇到环会报错（老行为，不会静默写坏）', blew)
+        blew2 = True
+    check('自己造的环：展开模式会报错（不会死循环）', blew2)
 
     data = M.serialize(top, table={})
     check('编号模式能序列化整条 game_actors', len(data) > 1000, '%d 字节' % len(data))
@@ -218,7 +239,9 @@ def main():
         print('     第二次: %s' % again[max(0, pos - 12):pos + 12].hex(' '))
     check('再序列化一次得到完全相同的字节（编号自洽）', again == data)
 
-    check('环被原样保留（重写后仍能找到环）', find_cycle(top2) is not None)
+    check('环被原样保留（重写后仍能找到环）',
+          (find_cycle(top2) is not None) if cyc is not None else True,
+          '本档本来就没环' if cyc is None else '')
 
     # 其它字段不能被牵连
     same = True

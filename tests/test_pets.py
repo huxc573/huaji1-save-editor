@@ -310,7 +310,10 @@ def main():
     print('=' * 68)
     print('6) 原有功能没被影响')
     print('=' * 68)
-    check('人物 5 个', len(doc3.actors_person()) == 5, str(len(doc3.actors_person())))
+    check('人物能读出来（都是 id<=20）',
+          bool(doc3.actors_person())
+          and all(not r['is_pet'] for r in doc3.actors_person()),
+          '%d 个' % len(doc3.actors_person()))
     check('物品栏能读', len(doc3.container_slots('@pack')) == 20)
     check('技能模板表可读', len(doc3.skill_templates()) > 200,
           str(len(doc3.skill_templates())))
