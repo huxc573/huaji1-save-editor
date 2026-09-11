@@ -24,6 +24,7 @@ __all__ = [
     'StructNode', 'UserDefNode', 'UserMarshalNode', 'IVarNode', 'LinkNode',
     'ExtNode',
     'encode_long', 'encode_fixnum', 'encode_string', 'encode_bignum', 'reencode',
+    'encode_integer', 'fits_fixnum', 'FIXNUM_MIN', 'FIXNUM_MAX',
     'serialize', 'serialize_with_header', 'w_symbol_bytes',
 ]
 
@@ -33,11 +34,14 @@ __all__ = [
 # --------------------------------------------------------------------------
 class Node(object):
     type = '?'
-    __slots__ = ('start', 'end')
+    # gidx = 该对象在**所属顶层对象**里的编号（Ruby Marshal 的 '@N' 就用这个号）。
+    # 解析时由 Parser.register 填上；手工拼出来的节点保持 -1（编号未知）。
+    __slots__ = ('start', 'end', 'gidx')
 
     def __init__(self, start=0, end=0):
         self.start = start
         self.end = end
+        self.gidx = -1
 
     # 原始字节（需要 buf 才能取，交给 Cursor.raw_of）
     def text(self):
@@ -349,10 +353,14 @@ class Parser(object):
             return c - 5
         if c >= 0xFC:
             return self.read_signed(256 - c)
-        return c - 256
+        # 0x80..0xFB：Ruby 的"直接小负数"，写的时候是 x-5，读要 +5。
+        # ⚠ 以前这里写成 c-256（少加 5），于是 -1 被读成 -6；整条重写对象时
+        #   再写回去就又偏移 -5，改一次名就错一次（真实事故：@enemy_id -1 → -11 → -21）。
+        return c - 256 + 5
 
     # ---- 组合读取 ----
     def register(self, node):
+        node.gidx = len(self.links)          # 该对象在本顶层对象里的编号
         self.links.append(node)
         return node
 
@@ -543,7 +551,20 @@ def parse_stream(buf):
 
 
 def encode_long(x):
-    """Ruby 1.8 w_long 编码。"""
+    """Ruby 1.8 w_long 编码（本作存档实测：多字节是**小端**）。
+
+      * 0            -> 0x00
+      * 0 < x < 123  -> x + 5
+      * -124 < x < 0 -> (x - 5) & 0xFF
+      * 其它         -> 长度字节(1..4) + 小端字节；负数长度是 256-len，
+                        而且必须用**补码最小长度**（最高位是符号位），
+                        否则读回来会变成正数：-65535 写成 `fe 01 00` 会被
+                        读成 +1，必须写成 `fd 01 00 ff`。
+
+    ⚠ 超过 4 字节的整数必须改用大整数（'l'）：长度字节写成 5..8 会被读成
+      "直接值 0..3"，后面整条流全部错位（0.9 的金钱改动就踩过这个坑）。
+    """
+    x = int(x)
     if x == 0:
         return b'\x00'
     if 0 < x < 123:
@@ -551,24 +572,51 @@ def encode_long(x):
     if -124 < x < 0:
         return bytes([(x - 5) & 0xFF])
     if x > 0:
-        raw = bytearray()
-        v = x
-        while v:
-            raw.append(v & 0xFF)
-            v >>= 8
-        return bytes([len(raw)]) + bytes(raw)
-    v = x
-    raw = bytearray()
-    while True:
-        raw.append(v & 0xFF)
-        v >>= 8
-        if v == -1:
-            break
-    return bytes([256 - len(raw)]) + bytes(raw)
+        n = (x.bit_length() + 7) // 8          # 正数：无符号最小长度
+        if n > 4:
+            raise MarshalError(
+                'w_long 装不下 %d：4 字节以上的整数必须用大整数（encode_bignum）编码'
+                % x)
+        return bytes([n]) + (x & ((1 << (8 * n)) - 1)).to_bytes(n, 'little')
+    n = 1                                      # 负数：补码最小长度
+    while x < -(1 << (8 * n - 1)):
+        n += 1
+    if n > 4:
+        raise MarshalError(
+            'w_long 装不下 %d：4 字节以上的整数必须用大整数（encode_bignum）编码' % x)
+    return bytes([256 - n]) + (x & ((1 << (8 * n)) - 1)).to_bytes(n, 'little')
 
 
 def encode_fixnum(x):
     return b'i' + encode_long(int(x))
+
+
+# Ruby Fixnum 的取值范围（"能不能塞进 4 字节 long"）。
+#
+# 依据：本作存档里 @cash（LockNumber）就有 `69 04 9c cb 2f 8d` = 2368719772
+# （0x8D2FCB9C，最高位是 1）这种**4 字节 Fixnum**，说明游戏的 Fixnum 能装下
+# 整个 32 位无符号范围；再大（例如 18955770854 = 0x4_69DA1BE6，要 5 字节）
+# 游戏自己写的是大整数 'l'。
+# ⚠ 边界必须是 0xFFFFFFFF：写成 2**31-1 会把 2368719772 这种值"升级"成
+#   大整数，导致"改回原值"也被算成改动（字节不一致）。
+FIXNUM_MIN = -(2 ** 31)
+FIXNUM_MAX = 2 ** 32 - 1
+
+
+def fits_fixnum(x):
+    return FIXNUM_MIN <= int(x) <= FIXNUM_MAX
+
+
+def encode_integer(x):
+    """整数：装得下就用 Fixnum('i')，装不下就用大整数('l')。
+
+    Ruby 里两者都是 Integer，运算/比较完全一致 ——
+    LockNumber 那些上亿的中间值本来就是大整数。
+    """
+    x = int(x)
+    if fits_fixnum(x):
+        return encode_fixnum(x)
+    return encode_bignum(x)
 
 
 def encode_bignum(x):
@@ -600,7 +648,7 @@ def reencode(node):
     仅支持 int / bignum / bool / string / float / nil。
     """
     if isinstance(node, IntNode):
-        return encode_fixnum(node.value)
+        return encode_integer(node.value)
     if isinstance(node, BignumNode):
         return encode_bignum(node.value)
     if isinstance(node, BoolNode):
@@ -614,7 +662,7 @@ def reencode(node):
         if isinstance(node.value, bool):
             return encode_bool(node.value)
         if isinstance(node.value, int):
-            return encode_fixnum(node.value)
+            return encode_integer(node.value)
         return b'0'
     raise TypeError('不支持的节点类型 %r' % type(node).__name__)
 
@@ -636,22 +684,65 @@ def w_symbol_bytes(name):
     return b':' + encode_long(len(b)) + b
 
 
-def serialize(node, depth=0):
-    """把一个节点序列化成完整、自包含的 Marshal 字节（不含 04 08 版本头）。"""
+# 会占用「对象编号」的节点类型。Ruby 的规则：除 nil / true / false / Fixnum /
+# Symbol 之外，一切都占一个编号（含 String / Array / Hash / Object / Struct /
+# Float / Bignum / UserDef / UserMarshal / 带 ivar 包装的对象）。
+NUMBERED_NODES = (StrNode, ArrayNode, HashNode, ObjNode, StructNode,
+                  UserDefNode, UserMarshalNode, IVarNode, FloatNode, BignumNode)
+
+
+def serialize(node, depth=0, table=None, base=None):
+    """把一个节点序列化成 Marshal 字节（不含 04 08 版本头）。
+
+    两种模式：
+
+    * ``table=None``（默认）——**展开模式**：把 '@N' 链接展开成独立副本，
+      输出里不含任何 '@N'。适合“往流中间插一小块”（@pack 的一格）这种
+      要求自包含的场景。缺点：遇到**循环引用**会无限递归。
+
+    * ``table={}`` ——**编号模式**：按 Ruby 的规则给对象编号，重复出现的
+      对象发 '@N' 引用，因此天然支持循环引用（Ruby Marshal 本来就是这么
+      处理环的）。编号从 ``base`` 开始，默认取 ``node.gidx``
+      （该节点在所属顶层对象里的原始编号），所以既能整条重写一个顶层
+      对象（gidx=0），也能原地重写一棵子树（区间之前的对象编号不变，
+      区间内部按新顺序重新编号 —— 这还顺便**保持了这个区间占用的
+      对象个数不变**，不会把后面兄弟节点的 '@N' 弄错位）。
+    """
     if depth > MAX_SERIALIZE_DEPTH:
-        raise MarshalError('序列化嵌套过深（可能有循环引用）')
+        raise MarshalError('序列化嵌套过深',
+                           '可能有循环引用；整条重写一个顶层对象请传 table={}'
+                           if table is None else
+                           '（table 模式不该出现无限递归，可能是链接表坏了）')
     if node is None:
         return b'0'
+
+    if table is not None:
+        if base is None:
+            base = node.gidx if node.gidx >= 0 else 0
+        if isinstance(node, NUMBERED_NODES):
+            if node in table:
+                # 已经 dump 过：发引用（这也正是环能被收住的原因）
+                return b'@' + encode_long(table[node])
+            table[node] = base + len(table)
+        elif isinstance(node, LinkNode):
+            # 目标在本区间**之前**：它的编号没变，直接发引用，不要重复 dump
+            t = node.target
+            if t is None:
+                raise MarshalError('对象链接 %d 没有目标，无法展开' % node.index)
+            if 0 <= t.gidx < base:
+                return b'@' + encode_long(t.gidx)
+            return serialize(t, depth + 1, table, base)
+
     if isinstance(node, NilNode):
         if isinstance(node.value, bool):
             return encode_bool(node.value)
         if isinstance(node.value, int):
-            return encode_fixnum(node.value)
+            return encode_integer(node.value)
         return b'0'
     if isinstance(node, BoolNode):
         return encode_bool(node.value)
     if isinstance(node, IntNode):
-        return encode_fixnum(node.value)
+        return encode_integer(node.value)
     if isinstance(node, BignumNode):
         return encode_bignum(node.value)
     if isinstance(node, FloatNode):
@@ -663,37 +754,38 @@ def serialize(node, depth=0):
     if isinstance(node, ArrayNode):
         out = [b'[', encode_long(len(node.items))]
         for it in node.items:
-            out.append(serialize(it, depth + 1))
+            out.append(serialize(it, depth + 1, table, base))
         return b''.join(out)
     if isinstance(node, HashNode):
         out = [b'{', encode_long(len(node.pairs))]
         for k, v in node.pairs:
-            out.append(serialize(k, depth + 1))
-            out.append(serialize(v, depth + 1))
+            out.append(serialize(k, depth + 1, table, base))
+            out.append(serialize(v, depth + 1, table, base))
         return b''.join(out)
     if isinstance(node, (ObjNode, StructNode)):
         tag = b'o' if isinstance(node, ObjNode) else b'S'
         out = [tag, w_symbol_bytes(node.cls), encode_long(len(node.ivars))]
         for k, v in node.ivars:
             out.append(w_symbol_bytes(k))
-            out.append(serialize(v, depth + 1))
+            out.append(serialize(v, depth + 1, table, base))
         return b''.join(out)
     if isinstance(node, UserDefNode):
         return (b'u' + w_symbol_bytes(node.cls) + encode_long(len(node.data))
                 + node.data)
     if isinstance(node, UserMarshalNode):
-        return b'U' + w_symbol_bytes(node.cls) + serialize(node.inner, depth + 1)
+        return b'U' + w_symbol_bytes(node.cls) + serialize(node.inner, depth + 1,
+                                                           table, base)
     if isinstance(node, IVarNode):
-        out = [b'I', serialize(node.inner, depth + 1),
+        out = [b'I', serialize(node.inner, depth + 1, table, base),
                encode_long(len(node.ivars))]
         for k, v in node.ivars:
             out.append(w_symbol_bytes(k))
-            out.append(serialize(v, depth + 1))
+            out.append(serialize(v, depth + 1, table, base))
         return b''.join(out)
     if isinstance(node, LinkNode):
         if node.target is None:
             raise MarshalError('对象链接 %d 没有目标，无法展开' % node.index)
-        return serialize(node.target, depth + 1)
+        return serialize(node.target, depth + 1, table, base)
     raise TypeError('不支持的节点类型 %r' % type(node).__name__)
 
 

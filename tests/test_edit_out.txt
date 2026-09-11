@@ -1,44 +1,39 @@
 加解密通道：HostBridge
-打开成功：明文 2001637 字节，19 个顶层对象
-原始：金钱=1001811528.0 角色=21 物品栏在用=13/20
-   [ 0] 海星●孵化蛋           模板186   实例1001   数量1    品质100
+打开成功：明文 1964556 字节，19 个顶层对象
+原始：金钱=1234.0 角色=10 物品栏在用=0/20
+   [ 0] （空）              模板None  实例None   数量0    品质None
    [ 1] （空）              模板None  实例None   数量0    品质None
-   [ 2] 佛手               模板3     实例1004   数量94   品质100
-   [ 3] 金柳露              模板239   实例1018   数量8    品质100
-   [ 4] 包子               模板2     实例1010   数量20   品质100
-   [ 5] 血色茶花             模板16    实例1011   数量20   品质100
-   [ 6] 仙狐涎              模板25    实例1012   数量20   品质100
-   [ 7] 力劈华山             模板243   实例1038   数量1    品质100
-   [ 8] 风水混元丹            模板38    实例1014   数量20   品质100
-   [ 9] 洞冥草              模板72    实例1015   数量20   品质100
-   [10] 摄妖香              模板73    实例1016   数量20   品质100
-   [11] 飞行符              模板75    实例1017   数量20   品质100
-   [12] 高级必杀             模板258   实例1039   数量1    品质100
-   [13] 高级毒              模板276   实例1040   数量1    品质100
+   [ 2] （空）              模板None  实例None   数量0    品质None
+   [ 3] （空）              模板None  实例None   数量0    品质None
+   [ 4] （空）              模板None  实例None   数量0    品质None
+   [ 5] （空）              模板None  实例None   数量0    品质None
+   [ 6] （空）              模板None  实例None   数量0    品质None
+   [ 7] （空）              模板None  实例None   数量0    品质None
+   [ 8] （空）              模板None  实例None   数量0    品质None
+   [ 9] （空）              模板None  实例None   数量0    品质None
+   [10] （空）              模板None  实例None   数量0    品质None
+   [11] （空）              模板None  实例None   数量0    品质None
+   [12] （空）              模板None  实例None   数量0    品质None
+   [13] （空）              模板None  实例None   数量0    品质None
    [14] （空）              模板None  实例None   数量0    品质None
    [15] （空）              模板None  实例None   数量0    品质None
    [16] （空）              模板None  实例None   数量0    品质None
    [17] （空）              模板None  实例None   数量0    品质None
    [18] （空）              模板None  实例None   数量0    品质None
    [19] （空）              模板None  实例None   数量0    品质None
-   [ 0] @name 节点=StrNode  target=None  解开后=海星●孵化蛋
-   [ 2] @name 节点=StrNode  target=None  解开后=佛手
-   [ 3] @name 节点=StrNode  target=None  解开后=金柳露
 本机机器码 = 178BFBFF00A40F41
 
 测试角色 ID = 4（）
-已占用的物品格：[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+已占用的物品格：[]
 
 ---- 开始修改 ----
 角色 4：等级 99，五维 300，潜力 888，HP/SP -> 3581/900
-第 0 格数量 -> 77
-第 2 格已清空
-第 1 格新增模板 87（祈福酒肆）×9
+第 0 格新增模板 87（祈福酒肆）×9
 开关0=True，变量3=4321，机器码 -> AAAABBBBCCCCDDDD
-待写入改动 348 字节
+待写入改动 148 字节
 
 ---- 保存并校验 ----
-已保存：d:\Life\Game\Local\MH\画迹\huaji1-save-editor\tests\test_copy.ogg（备份 test_copy.ogg.bak）
+已保存：D:\Life\Game\Local\MH\画迹\【画迹1：落日情缘】[正式版+资料片]\!Tools\Github\huaji1-save-editor\tests\test_copy.ogg（备份 test_copy.ogg.bak）
 [OK] 备份文件已生成                                  
 
 ---- 重新解密核对 ----
@@ -52,7 +47,6 @@
 [OK] 五维 = 300                                 
 [OK] 潜力 = 888                                 
 [OK] HP/SP 已填满                                3581/900
-[OK] 物品数量 = 77                                77
 [OK] 新增物品：模板 87 名称正确                          祈福酒肆 / 模板87
 [OK] 新增物品数量 = 9                               
 [OK] 新增物品是完整 RPG::Item（27 字段 = 模板 25 + @standard + @quality） RPG::Item，27 个字段
@@ -62,7 +56,7 @@
 
 ---- 与原始存档做逐字段对比 ----
 [OK] 改动都在预期范围内                                []
-共 32 处字段变化：
+共 30 处字段变化：
    game_switches.@data[0]
    game_variables.@data[3]
    game_actors.@data[4].@level
@@ -76,7 +70,8 @@
    game_actors.@data[4].@moli
    game_actors.@data[4].@exp
    game_party.@steps
-   data_items(数组长度 1041->1042)
+   data_items(数组长度 1005->1006)
+   data.@fame
    data.@cash.@value[0]
    data.@cash.@value[1]
    data.@cash.@value[2]
@@ -86,7 +81,6 @@
    data.@cash.@key3[0]
    data.@cash.@key3[1]
    data.@cash.@key3[2]
-   data.@cash.@key3[3]
-   …还有 8 处
+   …还有 6 处
 
 ===== 测试结果：全部通过 =====

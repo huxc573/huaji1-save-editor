@@ -46,6 +46,15 @@ def main():
     bridge = C.make_bridge(DLL_DIR, LOG.append)
     doc = MOD.Doc(TMP, bridge, LOG.append)
 
+    if not [r for r in doc.pack() if r['item'] is not None]:
+        # 背包可能是空的 —— 先塞一格并**存盘**。
+        # （后面会反复 discard()，而 discard 的语义是"回到磁盘上的样子"，
+        #   只存在内存里的播种会被丢掉）
+        doc.pack_add([r['slot'] for r in doc.pack() if r['item'] is None][0], 3, 4)
+        doc.pack_fix_all()
+        doc.save(backup=False)
+        doc = MOD.Doc(TMP, bridge, LOG.append)
+
     g0 = doc.gold()
     name0 = doc.actor_rows()[0]['name']
     aid = doc.actor_rows()[0]['id']

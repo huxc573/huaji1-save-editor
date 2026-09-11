@@ -28,6 +28,19 @@ class EditError(Exception):
 DEFAULT_QUALITY = 100
 
 
+def _dump(node):
+    """整块重写时的序列化。
+
+    * 节点是从存档里解析出来的（gidx >= 0）：用**编号模式** —— 重复对象发 '@N'
+      引用，编号自洽，而且能处理循环引用（Game_Actor#@who_attack_me 会指回
+      Game_Actor 自己）；
+    * 节点是工具自己拼出来的（gidx = -1）：退回**展开模式**（输出自包含）。
+    """
+    if getattr(node, 'gidx', -1) >= 0:
+        return M.serialize(node, table={})
+    return M.serialize(node)
+
+
 class PatchEngine(object):
     def __init__(self, plain):
         self.plain = bytes(plain)
@@ -81,7 +94,7 @@ class PatchEngine(object):
         if root is not None:
             # 这个节点属于本会话新建/重建的整块（比如某一格物品）：
             # 直接重新序列化整块，写回那一块占用的区间
-            self.patch_range(node.start, node.end, M.serialize(root))
+            self.patch_range(node.start, node.end, _dump(root))
         else:
             self.patch_range(node.start, node.end, M.reencode(node))
         return node
@@ -101,10 +114,15 @@ class PatchEngine(object):
         指向第 1 格内部的对象。如果只把第 1 格换成对象数量/顺序不同的新块，
         第 2 格的链接就会整体指错 —— 游戏读到的名字变成数组，直接报
         TypeError: cannot convert Array into String。
-        把整块（乃至整条 $data）重新序列化并展开链接，编号就永远自洽了。
+
+        做法：用 M.serialize 的**编号模式**（table={}）整体重序列化，
+        重复出现的对象发 '@N' 引用、编号从该节点自己的 gidx 开始，
+        所以既能保持编号自洽，又能处理循环引用（例如
+        Game_Actor#@who_attack_me.@who_attack_me 指回自己 —— 战斗过的存档
+        里很常见，展开模式会直接无限递归）。
         """
         if new_data is None:
-            new_data = M.serialize(node)
+            new_data = _dump(node)
         self.drop_inside(node.start, node.end)
         for k in [k for k in self._roots
                   if node.start <= k[0] and k[1] <= node.end]:
@@ -126,7 +144,9 @@ class PatchEngine(object):
         """
         old = span or (node.start, node.end)
         if new_data is None:
-            new_data = M.serialize(node)
+            # 编号模式（gidx>=0）：区间之前的对象编号不变，区间内部重新编号，
+            # 因此 Game_Actor 里的 '@who_attack_me' 这种**循环引用**也能写出去
+            new_data = _dump(node)
         self.drop_inside(old[0], old[1])
         for k in [k for k in self._roots if old[0] <= k[0] and k[1] <= old[1]]:
             del self._roots[k]

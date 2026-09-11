@@ -167,6 +167,12 @@ def main():
     if os.path.exists(CUR):
         shutil.copy2(CUR, TMP)
         doc3 = MOD.Doc(TMP, bridge, log.append)
+        if not [r for r in doc3.container_slots('@pack') if r['item'] is not None]:
+            # 这个档的道具背包是空的 —— 先放一件，后面"能不能用"才有东西可查
+            s_empty = [r['slot'] for r in doc3.container_slots('@pack')
+                       if r['item'] is None][0]
+            doc3.pack_write(s_empty, 43, 1, 100, '@pack')      # 43 = 五龙丹
+            check('现档道具栏为空 -> 先放 1 件（五龙丹）', True)
         bad3 = [b for b in doc3.pack_scan_bad() if '没登记' in b['why']]
         # 现档可能已经被上一个版本修好了 -> 这里只报告，不当作失败
         check('现档：扫描未登记物品（已被旧版修好则为 0）', True,

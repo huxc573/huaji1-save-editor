@@ -59,7 +59,17 @@ def main():
 
     empty = [r['slot'] for r in doc.pack() if r['item'] is None]
     used = [r['slot'] for r in doc.pack() if r['item'] is not None]
-    check('存档可读', len(empty) >= 2 and used, '空格 %s 在用 %s'
+    if len(used) < 3:
+        # 存档的道具栏可能是空的（或只剩一两件）—— 先补到 3 格，后面
+        # "改动已有格子"的用例才有东西可改（测试不再依赖存档状态）。
+        # 用模板 3 / 2（不是 TPL_ID），免得影响"换模板"那一条的预期
+        for tpl in (3, 2, 5):
+            if len(used) >= 3:
+                break
+            doc.pack_add(empty[0], tpl, 4)
+            empty = [r['slot'] for r in doc.pack() if r['item'] is None]
+            used = [r['slot'] for r in doc.pack() if r['item'] is not None]
+    check('存档可读', len(empty) >= 2 and len(used) >= 3, '空格 %s 在用 %s'
           % (empty[:4], used[:3]))
 
     # ---------- 1. make_pack_entry 不传品质也要有 @quality ----------
