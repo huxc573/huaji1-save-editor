@@ -11,9 +11,11 @@ last_save.txt
 selftest_result.txt
 error.log
 
-# 测试用的存档副本
+# 测试用的存档副本 / 测试输出
 test_*.ogg
 test_*.ogg.bak
+test_*_out.txt
+tests_report.txt
 *.bak
 
 # 游戏资产 / 第三方文件（绝不入库）
