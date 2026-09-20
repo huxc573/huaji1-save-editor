@@ -5,7 +5,7 @@
 步骤：
   1. 用系统自带 C# 编译器生成 32 位宿主 XJCodec32.exe（源码 src/native/XJCodec32.cs）
   2. 准备发行目录 dist/：
-       画迹1存档工具v1.0.exe + XJCodec32.exe + TP.dll + Socket.dll + 使用说明.txt
+       画迹1存档工具.exe + XJCodec32.exe + TP.dll + Socket.dll + 使用说明.txt
      （TP.dll / Socket.dll 是**游戏自带**文件，从游戏目录复制，仓库里不放它们）
   3. PyInstaller 打包单文件 exe（带 tcl 库，原因见 docs/开发指南.md）
 
@@ -29,8 +29,22 @@ sys.path.insert(0, SRC)
 from paths import game_dir as _game_dir                   # noqa: E402
 
 APP_VERSION = '1.3.1'
-EXE_NAME = '画迹1存档工具v' + APP_VERSION
+REPO_NAME = 'huaji1-save-editor'
+# 本地产物固定叫「画迹1存档工具.exe」，不带版本号；
+# 版本号只出现在 Release 附件名上（见下面的 RELEASE_EXE_NAME）。
+EXE_NAME = '画迹1存档工具'
+RELEASE_EXE_NAME = '%s-v%s.exe' % (REPO_NAME, APP_VERSION)
 EXE_DIR = os.path.join(ROOT, 'dist')
+
+# 发行附件：dist/ 里的本地名 -> Release 上的 ASCII 名（**唯一来源**，release.py 读这里）。
+# GitHub 会剔除资源名里的非 ASCII 字符，所以中文名只留在本地。
+RELEASE_ASSETS = [
+    (EXE_NAME + '.exe', RELEASE_EXE_NAME),
+    ('XJCodec32.exe', 'XJCodec32.exe'),
+    ('TP.dll', 'TP.dll'),
+    ('Socket.dll', 'Socket.dll'),
+    ('使用说明.txt', 'USAGE.txt'),
+]
 PY = sys.executable
 
 CSC_CANDIDATES = [

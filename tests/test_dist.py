@@ -16,7 +16,7 @@ from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向
 GAME = _game_dir()
 REL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    'dist')
-EXE = os.path.join(REL, '画迹1存档工具v1.3.1.exe')
+EXE = os.path.join(REL, '画迹1存档工具.exe')          # 本地产物名不带版本号（见 tools/build.py）
 SAVE = os.path.join(GAME, 'Audio', 'BGM', 'sy.ogg')
 
 # PyInstaller + uv 的 Python 在 VSCode 里会因 PYTHONHOME/PYTHONPATH 出错，必须清掉

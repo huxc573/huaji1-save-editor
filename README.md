@@ -67,15 +67,16 @@
 
 1. 到 [Releases](../../releases/latest) 下载全部 5 个附件：
 
-   | 下载文件名（ASCII） | 页面显示名 | 说明 |
+   | 下载文件名（ASCII） | 本地产物名 | 说明 |
    |---|---|---|
-   | `huaji1-save-editor-v1.1.exe` | 画迹1存档工具v1.1.exe | 主程序 |
+   | `huaji1-save-editor-v1.3.1.exe` | 画迹1存档工具.exe | 主程序（本地产物名不带版本号） |
    | `XJCodec32.exe` | XJCodec32.exe | 必需的 32 位加解密宿主 |
    | `TP.dll` / `Socket.dll` | 同名 | 游戏自带库（版权归游戏原作者），也可从自己游戏根目录复制 |
    | `USAGE.txt` | 使用说明.txt | 中文说明书 |
 
-   > Release 附件的**文件名只能是 ASCII**（GitHub 会把非 ASCII 字符剔掉，
-   > 中文名放在页面的 Label 一列）。下载后改名不影响使用。
+   > Release 附件的**文件名只能是 ASCII**（GitHub 会把非 ASCII 字符剔掉）；
+   > 附件名与本地名的对应关系写在 `tools/build.py` 的 `RELEASE_ASSETS` 里，
+   > 发版由 `python tools/release.py` 自动改名、上传。下载后改名不影响使用。
 2. 把这 5 个文件放到同一个文件夹；
 3. 先**自己备份**一份 `Audio\BGM\sy.ogg`；
 4. **退出游戏**，双击 exe → 【选择存档…】选中 `Audio\BGM\sy.ogg`；
