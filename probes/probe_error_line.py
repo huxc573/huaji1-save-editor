@@ -6,7 +6,7 @@
   2) 打印该段落第 147 行附近的内容
   3) 顺便把 0163 那个 .rb 文件的行数关系算清楚（文件里为什么隔行是空的）
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -23,7 +23,7 @@ except Exception:
     pass
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 SCRIPTS = os.path.join(GAME, 'Try', 'scripts')
 ALL = os.path.join(SCRIPTS, '_all_scripts.rb')

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-xj_codec —— 存档容器解析 + TP.dll 加解密（0.2，独立版）
+codec —— 存档容器解析 + TP.dll 加解密（0.2，独立版）
 
 与 0.1 的区别：**不再依赖游戏目录**。
 程序把 TP.dll / Socket.dll 放在自己目录（或子目录 dll/）里，
@@ -74,7 +74,12 @@ def find_dll(name, extra=None):
 
 
 def find_host(extra=None):
-    """找自带的 32 位宿主 XJCodec32.exe。"""
+    """找自带的 32 位宿主 XJCodec32.exe（源码态在 src/native/）。"""
+    if not getattr(sys, 'frozen', False):
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         'native', HOST_NAME)
+        if os.path.exists(p):
+            return p
     return find_dll(HOST_NAME, extra)
 
 

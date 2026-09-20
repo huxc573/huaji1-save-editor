@@ -3,7 +3,7 @@
 
 用途：0.7 —— 让存档工具的召唤兽列表与游戏界面顺序一致、隐藏已放生的召唤兽。
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -15,7 +15,7 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 SCRIPTS = os.path.join(GAME, 'Try', 'scripts')
 

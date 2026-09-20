@@ -7,7 +7,7 @@
     python build_host.py            # 编译 + 自检
     python build_host.py --compile  # 只编译
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -23,18 +23,17 @@ import sys
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TRY = os.path.dirname(os.path.dirname(HERE))
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+SRC = os.path.join(HERE, '..', 'src')                # 仓库的 src/
+NATIVE = os.path.join(SRC, 'native')                 # 宿主 cs / exe 都在 src/native/
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
-SRC = os.path.join(HERE, 'XJCodec32.cs')
+SRC_FILE = os.path.join(NATIVE, 'XJCodec32.cs')
 
 CSC_CANDIDATES = [
     r'C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe',      # 32 位
     r'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe',
     r'C:\Windows\Microsoft.NET\Framework\v3.5\csc.exe',
 ]
-
-OUT_DIRS = [HERE, os.path.join(TRY, 'Exe', '0.3')]
 
 
 def find_csc():
@@ -45,9 +44,9 @@ def find_csc():
 
 
 def compile_host(csc):
-    exe = os.path.join(HERE, 'XJCodec32.exe')
+    exe = os.path.join(NATIVE, 'XJCodec32.exe')
     cmd = [csc, '/nologo', '/platform:x86', '/optimize+', '/target:exe',
-           '/out:' + exe, SRC]
+           '/out:' + exe, SRC_FILE]
     print('编译：%s' % ' '.join(cmd))
     p = subprocess.run(cmd, capture_output=True, text=True,
                        encoding='utf-8', errors='replace')
@@ -58,11 +57,6 @@ def compile_host(csc):
         print('编译失败，退出码 %s' % p.returncode)
         return None
     print('编译成功：%s（%d 字节）' % (exe, os.path.getsize(exe)))
-    for d in OUT_DIRS:
-        if os.path.abspath(d) != os.path.abspath(HERE):
-            os.makedirs(d, exist_ok=True)
-            shutil.copyfile(exe, os.path.join(d, 'XJCodec32.exe'))
-            print('已复制到 %s' % d)
     return exe
 
 

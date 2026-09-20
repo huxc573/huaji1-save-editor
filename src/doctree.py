@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-xj_model —— 把解密后的 Marshal 数据整理成"界面能显示的一切"（0.2，只读）
+doctree —— 把解密后的 Marshal 数据整理成"界面能显示的一切"（0.2，只读）
 
 对应游戏脚本：
   0030 Module Save_Load  存档路径与读写顺序
@@ -15,12 +15,12 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import xj_codec as C
-import xj_edit as E
-import xj_marshal as M
+import codec as C
+import patchwriter as E
+import marshal_ruby as M
 
 try:
-    import pet_table as _PET_TABLE_MOD      # 由 gen_pet_table.py 从游戏脚本生成
+    from tables import pet_table as _PET_TABLE_MOD  # 由 gen_pet_table.py 从游戏脚本生成
 except Exception:                           # pragma: no cover
     _PET_TABLE_MOD = None
 
@@ -794,7 +794,7 @@ class Doc(object):
         找游戏文件的起点目录（按优先级）：
 
           1. 环境变量 ``XJ_GAME``（用户/开发时手动指定游戏目录）
-          2. ``xj_env.game_dir()``（向上找 Game.exe；源码仓库在游戏目录外时靠它）
+          2. ``paths.game_dir()``（向上找 Game.exe；源码仓库在游戏目录外时靠它）
           3. 存档所在目录
           4. 当前工作目录
           5. 程序目录
@@ -807,8 +807,8 @@ class Doc(object):
         if env:
             bases.append(env)
         try:
-            import xj_env                     # 开发/源码运行时存在
-            bases.append(xj_env.game_dir())
+            import paths                     # 开发/源码运行时存在
+            bases.append(paths.game_dir())
         except Exception:
             pass
         bases += [os.path.dirname(self.path), os.getcwd(), C.app_dir()]

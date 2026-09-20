@@ -1,7 +1,7 @@
 ﻿# -*- coding: utf-8 -*-
 """1.0 附加实测：把 exe 拷到"没有 Try/scripts 的目录"里跑，验证 $pet 名字表
 用随程序携带的 pet_table.py 兜底（也就是确认 pet_table 真的被打进 exe 了）。"""
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -19,7 +19,7 @@ try:
 except Exception:
     pass
 
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 REL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    'dist')

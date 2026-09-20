@@ -1,5 +1,5 @@
 ﻿"""1.0 独立性实测：把发行目录整体拷到临时目录，切换工作目录后运行 exe 自检。"""
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 REL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    'dist')

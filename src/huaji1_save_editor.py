@@ -12,7 +12,7 @@
   * 上线修改功能：金钱/声望/步数、角色、物品栏、开关变量、机器码
       —— 保存前自动备份 .bak，写回后回读校验
 
-启动：双击 exe；也可以 python xj_viewer.py [存档路径] [--selftest]
+启动：双击 exe；也可以 python huaji1_save_editor.py [存档路径] [--selftest]
 """
 import os
 import sys
@@ -45,10 +45,10 @@ _setup_tcl_env()
 
 import traceback
 
-import xj_codec as C
-import xj_edit as E
-import xj_marshal as M
-import xj_model as MOD
+import codec as C
+import patchwriter as E
+import marshal_ruby as M
+import doctree as MOD
 
 VERSION = MOD.APP_VERSION
 AUTHOR = MOD.AUTHOR
@@ -424,7 +424,7 @@ class App(object):
                    command=self.apply_base_name).grid(row=0, column=3, padx=2)
         ttk.Button(nf, text='清除显示名(恢复原名)',
                    command=self.clear_custom_name).grid(row=0, column=4, padx=2)
-        # 召唤兽专用：$pet 名字表校验（名字不在表里游戏会崩）—— 见 xj_model 注释
+        # 召唤兽专用：$pet 名字表校验（名字不在表里游戏会崩）—— 见 doctree 注释
         self.lb_name_check = ttk.Label(nf, text='', foreground='#444')
         self.lb_name_check.grid(row=1, column=0, columnspan=3, sticky='w', pady=(4, 0))
         ttk.Button(nf, text='恢复模板本名',

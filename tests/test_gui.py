@@ -4,7 +4,7 @@
 目的是确认改过 CHANGELOG / 显示逻辑之后界面不会被"炸掉"，
 以及"更新日志"页确实能渲染出版本记录。
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -20,11 +20,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import xj_codec as C
-import xj_model as MOD
-import xj_viewer as V
+import codec as C
+import doctree as MOD
+import huaji1_save_editor as V
 
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 SAVE = os.path.join(GAME, 'Audio', 'BGM', 'sy.ogg')
 # 源码目录里没有 TP.dll（发行目录才有），测试用游戏根目录里的
@@ -177,7 +177,7 @@ def _run(root):
             root.update()
             print('忘掉第一个后：技能 %d 个' % len(app.tv_skill.get_children()))
         # ---- 1.3：克隆技能（弹窗 -> 自动点【克隆】）----
-        # 教训：克隆按钮曾经因为 xj_viewer 里裸用 tk.（NameError）而"点了没反应"，
+        # 教训：克隆按钮曾经因为主程序里裸用 tk.（NameError）而"点了没反应"，
         # 因为 Tk 回调的异常在 --windowed 的 exe 里是静默的。这里守住这两点。
         print('Tk 回调异常钩子已装：%s'
               % (root.report_callback_exception.__name__

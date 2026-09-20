@@ -18,7 +18,7 @@
    正确做法：按 Ruby 的规则给对象编号，重复出现的对象发 ``@N`` 引用
    （``M.serialize(node, table={})``）。
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -29,12 +29,12 @@ import os
 import shutil
 import sys
 
-import xj_codec as C
-import xj_edit as E
-import xj_marshal as M
-import xj_model as MOD
+import codec as C
+import patchwriter as E
+import marshal_ruby as M
+import doctree as MOD
 
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 DLL_DIR = GAME if os.path.exists(os.path.join(GAME, 'TP.dll')) else \
     os.path.dirname(os.path.abspath(__file__))

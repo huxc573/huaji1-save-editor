@@ -169,14 +169,16 @@ python tests/test_gui.py       # 界面冒烟（8 个页签全建一遍）
 ```
 huaji1-save-editor/
 ├─ src/                     应用本体（PyInstaller 的入口也在这里）
-│  ├─ xj_viewer.py          tkinter 界面（8 页签）
-│  ├─ xj_model.py           游戏语义层 Doc：角色/召唤兽/物品栏/开关/保存 + 字段注释表
-│  ├─ xj_edit.py            写入引擎：区间补丁、整块重写、物品实例构造
-│  ├─ xj_marshal.py         Ruby Marshal 解析/序列化（对象编号规则与 Ruby 对齐）
-│  ├─ xj_codec.py           容器解析、TP.dll 加解密、32 位宿主桥、LockNumber
-│  ├─ xj_env.py             开发期辅助：定位游戏目录、sys.path 引导
-│  ├─ pet_table.py          $pet 名字表（由 tools/gen_pet_table.py 从游戏脚本生成）
-│  ├─ XJCodec32.cs/.exe     32 位加解密宿主（源码 + 预编译）
+│  ├─ huaji1_save_editor.py tkinter 界面（8 页签，主程序入口）
+│  ├─ doctree.py            游戏语义层 Doc：角色/召唤兽/物品栏/开关/保存 + 字段注释表
+│  ├─ patchwriter.py        写入引擎：区间补丁、整块重写、物品实例构造
+│  ├─ marshal_ruby.py       Ruby Marshal 解析/序列化（对象编号规则与 Ruby 对齐）
+│  ├─ codec.py              容器解析、TP.dll 加解密、32 位宿主桥、LockNumber
+│  ├─ paths.py              开发期辅助：定位游戏目录、sys.path 引导
+│  ├─ tables/
+│  │  └─ pet_table.py       $pet 名字表（由 tools/gen_pet_table.py 从游戏脚本生成）
+│  └─ native/
+│     └─ XJCodec32.cs/.exe  32 位加解密宿主（源码 + 预编译）
 ├─ tools/                   构建与维护脚本
 │  ├─ build.py              一键打包
 │  ├─ build_host.py         只编译 32 位宿主

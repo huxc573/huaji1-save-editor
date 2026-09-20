@@ -5,7 +5,7 @@
 如果在模板里某字段是 0/nil 而实例里是别值，那么"从模板克隆"出来的新物品
 就会缺少游戏运行时的加工 —— 表现就是"新增的物品不能用"。
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -19,11 +19,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import xj_codec as C
-import xj_marshal as M
-import xj_model as MOD
+import codec as C
+import marshal_ruby as M
+import doctree as MOD
 
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 DLL_DIR = GAME if os.path.exists(os.path.join(GAME, 'TP.dll')) else HERE
 FILES = [('原档 sy.ogg.init', os.path.join(GAME, 'Audio', 'BGM', 'sy.ogg.init')),

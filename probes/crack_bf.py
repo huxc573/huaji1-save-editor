@@ -8,7 +8,7 @@
   B) 真存档：明文 save_plain.bin 头 8 字节 = 04 08 5B 06 5B 07 22 1B
      对应密文（zlib 解开 sy.ogg）= 3D 84 1F FE A5 77 A2 8B
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -32,7 +32,7 @@ except Exception as e:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRY = os.path.dirname(os.path.dirname(HERE))
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 SAVE = os.path.join(GAME, 'Audio', 'BGM', 'sy.ogg')
 PLAIN = os.path.join(TRY, 'save_plain.bin')

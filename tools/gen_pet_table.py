@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""从游戏脚本 0011 里抽出 $pet 表，生成 pet_table.py（守护数据，供 xj_model 兜底用）。
+"""从游戏脚本 0011 里抽出 $pet 表，生成 pet_table.py（守护数据，供 doctree 兜底用）。
 
 $pet 的结构（脚本 0011）：
     $pet = { "宠物名" => [攻击资质,防御资质,体力资质,法力资质,速度资质,闪躲资质,
@@ -11,7 +11,7 @@ $pet 的结构（脚本 0011）：
     0163 第 436/439 行          : $pet[@baby_window.baby.name][7]  （无判断）
     0164 召唤兽图鉴             : zz = $pet[baby.name]             （无判断）
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -28,7 +28,7 @@ except Exception:
     pass
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 SCRIPTS = os.path.join(GAME, 'Try', 'scripts')
 
@@ -115,7 +115,7 @@ def main():
         out.append('    %r: (%r, %r, %d),' % (n, zz, grow, carry))
     out.append('}')
     out.append('')
-    dst = os.path.join(HERE, 'pet_table.py')
+    dst = os.path.join(HERE, '..', 'src', 'tables', 'pet_table.py')
     with open(dst, 'w', encoding='utf-8') as f:
         f.write('\n'.join(out) + '\n')
     print('已写入 %s（%d 字节，%d 个名字）' % (dst, os.path.getsize(dst), len(order)))

@@ -3,7 +3,7 @@
 打包脚本（构建 + 发行）
 
 步骤：
-  1. 用系统自带 C# 编译器生成 32 位宿主 XJCodec32.exe（源码 src/XJCodec32.cs）
+  1. 用系统自带 C# 编译器生成 32 位宿主 XJCodec32.exe（源码 src/native/XJCodec32.cs）
   2. 准备发行目录 dist/：
        画迹1存档工具v1.0.exe + XJCodec32.exe + TP.dll + Socket.dll + 使用说明.txt
      （TP.dll / Socket.dll 是**游戏自带**文件，从游戏目录复制，仓库里不放它们）
@@ -26,7 +26,7 @@ ROOT = os.path.dirname(HERE)                               # 仓库根目录
 SRC = os.path.join(ROOT, 'src')
 sys.path.insert(0, SRC)
 
-from xj_env import game_dir as _game_dir                   # noqa: E402
+from paths import game_dir as _game_dir                   # noqa: E402
 
 APP_VERSION = '1.3.1'
 EXE_NAME = '画迹1存档工具v' + APP_VERSION
@@ -48,9 +48,10 @@ def build_host():
     csc = next((p for p in CSC_CANDIDATES if os.path.exists(p)), None)
     if not csc:
         raise SystemExit('找不到 csc.exe（需要 .NET Framework 4.x）')
-    exe = os.path.join(SRC, 'XJCodec32.exe')
+    native = os.path.join(SRC, 'native')
+    exe = os.path.join(native, 'XJCodec32.exe')
     cmd = [csc, '/nologo', '/platform:x86', '/optimize+', '/target:exe',
-           '/out:' + exe, os.path.join(SRC, 'XJCodec32.cs')]
+           '/out:' + exe, os.path.join(native, 'XJCodec32.cs')]
     p = subprocess.run(cmd, capture_output=True, text=True,
                        encoding='utf-8', errors='replace')
     if p.returncode != 0 or not os.path.exists(exe):
@@ -99,7 +100,7 @@ def build_exe():
             '--specpath', ROOT,
             '--paths', SRC]
            + tcl_data_args()
-           + [os.path.join(SRC, 'xj_viewer.py')])
+           + [os.path.join(SRC, 'huaji1_save_editor.py')])
     log('打包中…')
     p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
                        encoding='utf-8', errors='replace')

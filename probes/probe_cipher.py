@@ -5,7 +5,7 @@
 
 不需要游戏存档，只借用 DLL。
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -23,11 +23,11 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRY = os.path.dirname(os.path.dirname(HERE))
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 
 sys.path.insert(0, os.path.join(TRY, 'Source', '0.2'))
-import xj_codec as C
+import codec as C
 
 
 def unwrap(blob):

@@ -4,7 +4,7 @@
 提取出来的 .rb 文件里"隔行是空行"，所以游戏里的行号 = 文件行号 / 2。
 推测出问题的是：$pet["#{baby.name}"][7]  —— $pet 里没有这个宠物名字 -> nil[7]。
 """
-# --- 开发期路径引导：让 import xj_* 找到 ../src ----------------------------
+# --- 开发期路径引导：让 import 项目模块找到 ../src ----------------------------
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -21,7 +21,7 @@ except Exception:
     pass
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-from xj_env import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
+from paths import game_dir as _game_dir          # 游戏目录 = XJ_GAME 或向上找 Game.exe
 GAME = _game_dir()
 SCRIPTS = os.path.join(GAME, 'Try', 'scripts')
 

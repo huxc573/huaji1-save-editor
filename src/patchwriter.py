@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-xj_edit —— 0.3 的写入引擎
+patchwriter —— 0.3 的写入引擎
 
 思路（沿用 0.1 已验证的做法）：解析时每个节点都带明文里的字节区间，
 修改时**只把改动过的字段重新编码**，再按原始偏移升序重放回明文；
@@ -15,7 +15,7 @@ xj_edit —— 0.3 的写入引擎
 import os
 import shutil
 
-import xj_marshal as M
+import marshal_ruby as M
 
 
 class EditError(Exception):

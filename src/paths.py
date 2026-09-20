@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-xj_env —— 开发期辅助：定位游戏目录 & 引导 sys.path
+paths —— 开发期辅助：定位游戏目录 & 引导 sys.path
 
 这个仓库（源码）和游戏本体是**分开**的：
     <画迹目录>/
@@ -15,17 +15,17 @@ xj_env —— 开发期辅助：定位游戏目录 & 引导 sys.path
   3) 找不到就抛错并提示设置 ``XJ_GAME``
 
 另外 ``bootstrap()`` 把 ``src/`` 加进 ``sys.path``，让 tools/tests/probes
-里 ``import xj_model`` 之类能正常工作。
+里 ``import doctree`` 之类能正常工作。
 
 用法（tools/ tests/ probes/ 里的脚本）：
 
     import os, sys
     HERE = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(os.path.dirname(HERE), 'src'))
-    from xj_env import game_dir as _game_dir
+    from paths import game_dir as _game_dir
     GAME = _game_dir()
 
-应用本体（``src/xj_viewer.py``）**不需要**这些东西：它在运行时完全靠
+应用本体（``src/huaji1_save_editor.py``）**不需要**这些东西：它在运行时完全靠
 "存档路径 / 程序目录向上找"来定位 ``Data/`` 与 ``Try/scripts``。
 """
 import os
@@ -43,7 +43,7 @@ def repo_root():
 
 
 def bootstrap():
-    """把 src/ 放到 sys.path 最前面（在 import xj_* 之前调用）。"""
+    """把 src/ 放到 sys.path 最前面（在 import 项目模块之前调用）。"""
     s = src_dir()
     if s in sys.path:
         sys.path.remove(s)
