@@ -5,11 +5,13 @@ r"""发 GitHub Release：按 `build.py` 里的命名规则准备好附件，再�
     python tools/release.py --upload-only   # Release 已存在，只重传附件
     python tools/release.py --dry           # 只打印要做什么，不动手
 
-附件命名（**唯一来源在 tools/build.py 的 RELEASE_ASSETS**，别在这儿手敲）：
-    huaji1-save-editor-v1.3.1.exe   主程序（本地产物固定叫 画迹1存档工具.exe，不带版本号）
-    XJCodec32.exe                   32 位加解密宿主，缺了读不了存档
-    TP.dll / Socket.dll             游戏自带库（版权归游戏原作者）
-    USAGE.txt                       使用说明
+附件（**唯一来源在 tools/build.py 的 RELEASE_ASSETS**，别在这儿手敲）：
+    huaji1-save-editor-vX.Y.Z.zip   一个包，里面是：
+        画迹1存档工具.exe           主程序（本地产物固定叫这个名，不带版本号）
+        XJCodec32.exe               32 位加解密宿主，缺了读不了存档
+        TP.dll / Socket.dll         游戏自带库（版权归游戏原作者）
+        使用说明.txt
+    ⚠ 只传一个 zip：以前拆成 5 个附件，总有人只下 exe、漏了 XJCodec32.exe。
 
 Release 正文 = CHANGELOG.md 里对应版本的那一段 + 一段固定的下载说明。
 需要本机装了 `gh` 且已登录（`gh auth status`）；git 推送另说。
@@ -72,18 +74,14 @@ def notes_text():
         if head >= 0:
             nxt = text.find('\n## ', head + 1)
             body = text[head:nxt if nxt > 0 else len(text)].rstrip()
-    names = [a for _, a in b.RELEASE_ASSETS]
-    exe, host, tp, socket, usage = names
+    zipname = b.RELEASE_ASSETS[0][1]
     extra = (
         '## 下载 / 用法\n\n'
-        '5 个附件都下，放在**同一个目录**里：\n\n'
-        '* `%s` —— 主程序（双击即开，免安装）\n'
-        '* `%s` —— **必须和主程序放一起**：32 位加解密宿主（工具自带的，非游戏文件）\n'
-        '* `%s` / `%s` —— 游戏自带的 32 位库，也可从自己游戏根目录复制\n'
-        '* `%s` —— 使用说明\n\n'
-        '> 附件名只能是 ASCII（GitHub 会剔除中文），跟仓库名 + 版本号保持一致；\n'
-        '> 本地 dist\\ 里的 `%s` 是同一个文件。下载后改名不影响使用。\n'
-        % (exe, host, tp, socket, usage, os.path.basename(b.RELEASE_ASSETS[0][0]))
+        '**只下这一个附件就够了**：`%s`\n\n'
+        '```\n%s\n```\n\n'
+        '解压到任意目录（**别只把 exe 拖出来**），双击 `%s` 即可，免安装、不用再单独下依赖。\n\n'
+        '> 附件名只能是 ASCII（GitHub 会剔除中文）；包内的文件名保持中文，改名不影响使用。\n'
+        % (zipname, '\n'.join(b.ZIP_MEMBERS), b.EXE_NAME + '.exe')
     )
     return extra + ('\n---\n\n' + body + '\n' if body else '')
 

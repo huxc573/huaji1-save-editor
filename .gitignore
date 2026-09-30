@@ -12,6 +12,7 @@ selftest_result.txt
 error.log
 
 # 测试用的存档副本 / 测试输出
+.huaji1-save-editor/
 test_*.ogg
 test_*.ogg.bak
 test_*_out.txt

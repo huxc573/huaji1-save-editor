@@ -4,7 +4,7 @@
 > 直接解密游戏存档、用界面改金钱/角色/召唤兽/物品栏/开关变量，再加密写回。
 >
 > 作者 **[@huxc573](https://github.com/huxc573)** · 开源协议 **MIT** ·
-> 最新版本 **v1.1**
+> 最新版本 **v1.4.0**
 
 <!-- 徽章位（发布后可按需补上） -->
 ![platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey)
@@ -53,31 +53,39 @@
 | 页签 | 能做什么 |
 |---|---|
 | **概览 / 快捷修改** | 存档概况（格式/大小/MD5/游戏时间/机器码）；金钱（元宝）、声望、仓库金额、步数 |
+| **存档管理** | 每次保存前**自动留一份带时间戳的备份**（同一份存档 90 秒内只留一次）；列出所有备份（时间/大小/来源/**备注**），可**恢复选中 / 恢复最新 / 删除选中 / 删除无备注 / 编辑备注 / 打开目录**，列表项**双击直接恢复** |
 | **全部解析数据** | 19 个顶层对象**全量**树形浏览：字段 / 类型 / 值 / **注释** 四列；<br>全局搜索（搜字段名或值）→ 双击结果**跳到树上**；右键改任意标量字段 |
-| **角色 / 召唤兽** | **人物**：等级（自动同步经验）、经验、HP/SP、活力/体力、五维、潜力、附加属性；<br>**召唤兽**：成长 / 忠诚 / 六项资质 / 携带等级 / 技能（学会·忘掉·清空・**克隆**，带搜索，**表格显示技能描述**）<br>改名：【设为显示名(@new_name)】【改基础名(@name)】【恢复模板本名】<br>召唤兽列表顺序**与游戏界面一致**，已放生的默认隐藏（可勾选显示） |
+| **角色 / 召唤兽** | **人物**：等级（自动同步经验）、经验、HP/SP、活力/体力、五维、潜力、附加属性；<br>**召唤兽**：成长 / 忠诚 / 六项资质 / 携带等级 / 技能（学会·忘掉·清空・**克隆**，带搜索；技能描述显示在表下的说明框里）<br>版面与画迹2 一致：一览表 →「改字段」→ 左「字段 / 当前值」+ 右「技能 / 详细信息」<br>改名：【设为显示名(@new_name)】【改基础名(@name)】【恢复模板本名】<br>召唤兽列表顺序**与游戏界面一致**，已放生的默认隐藏（可勾选显示） |
 | **物品栏 (道具/行囊/备用)** | 游戏里的三个 20 格容器（`@pack` / `@wallet` / `@talisman`）；<br>格子 / 数量 / 物品id / 品质 一体写入；搜索过滤物品；<br>新物品会**自动登记进 `$data_items`**（不登记游戏会提示"该物品无法使用"）；<br>「一键修复异常格」救回被写坏的格子 |
 | **开关 / 变量** | 双击切换 `$game_switches` / `$game_variables` |
 | **机器码** | 查看存档机器码 & 本机机器码；换电脑时一键填入本机（否则读档会提示"存档的主人不是你"） |
 | **说明 / 机制** | 内置的格式与机制说明 |
 | **更新日志** | 各版本改了什么 |
 
-写回时会：**自动备份** `sy.ogg.bak` → 重新加密写回 → **重新解密读回校验**。
+> 技能名 / 技能描述 / 物品名 / 武器名 / 人物模板名 / 职业名**内置在程序里**，
+> 查名字不依赖游戏目录（`Data\*.rxdata` 只当兜底，读不到也不报错）——
+> 所以工具放哪个盘、哪个目录都能跑。
+
+写回时会：**自动备份** `sy.ogg.bak` → 重新加密写回 → **重新解密读回校验**；
+同时在【存档管理】页留一份带时间戳的副本（`Audio\BGM\.huaji1-save-editor\sy.<时间戳>.ogg`）。
 
 ## 下载与使用
 
-1. 到 [Releases](../../releases/latest) 下载全部 5 个附件：
+1. 到 [Releases](../../releases/latest) 下载**唯一那个附件**：
 
-   | 下载文件名（ASCII） | 本地产物名 | 说明 |
-   |---|---|---|
-   | `huaji1-save-editor-v1.3.1.exe` | 画迹1存档工具.exe | 主程序（本地产物名不带版本号） |
-   | `XJCodec32.exe` | XJCodec32.exe | 必需的 32 位加解密宿主 |
-   | `TP.dll` / `Socket.dll` | 同名 | 游戏自带库（版权归游戏原作者），也可从自己游戏根目录复制 |
-   | `USAGE.txt` | 使用说明.txt | 中文说明书 |
+   ```
+   huaji1-save-editor-v1.4.0.zip
+     ├─ 画迹1存档工具.exe      主程序
+     ├─ XJCodec32.exe          必需的 32 位加解密宿主
+     ├─ TP.dll / Socket.dll    游戏自带库（版权归游戏原作者）
+     └─ 使用说明.txt
+   ```
 
-   > Release 附件的**文件名只能是 ASCII**（GitHub 会把非 ASCII 字符剔掉）；
-   > 附件名与本地名的对应关系写在 `tools/build.py` 的 `RELEASE_ASSETS` 里，
-   > 发版由 `python tools/release.py` 自动改名、上传。下载后改名不影响使用。
-2. 把这 5 个文件放到同一个文件夹；
+   > ⚠ **只下一个文件就够了，别再单独找 exe** —— 以前拆成 5 个附件，总有人
+   > 只拖走主程序、漏了 `XJCodec32.exe`，于是报"读不了存档 / 缺少依赖"。
+   > 附件名只能是 ASCII（GitHub 会剔除中文），包内文件名保持中文，改名不影响使用。
+   > 包内容的唯一来源是 `tools/build.py` 的 `ZIP_MEMBERS`，发版由 `python tools/release.py` 上传。
+2. **解压**到一个文件夹（别只把 exe 拖出来，那会把依赖留在压缩包里）；
 3. 先**自己备份**一份 `Audio\BGM\sy.ogg`；
 4. **退出游戏**，双击 exe → 【选择存档…】选中 `Audio\BGM\sy.ogg`；
 5. 改完点【保存修改(Ctrl+S)】→ 进游戏确认。
@@ -160,7 +168,9 @@ python tests/test_pack.py      # 物品栏
 python tests/test_registry.py  # 物品登记（$data_items）
 python tests/test_link_safe.py # Marshal 对象链接安全
 python tests/test_edit.py      # 端到端编辑 + 结构对比
-python tests/test_gui.py       # 界面冒烟（8 个页签全建一遍）
+python tests/test_gui.py       # 界面冒烟（9 个页签全建一遍）
+python tests/test_backup.py    # 存档管理（备份/恢复/删除；全在临时副本上跑）
+python tests/test_db_embed.py  # 技能名走内置表：断掉游戏目录也出得来（16 项）
 ```
 
 > 测试会**复制**一份存档到临时文件再改，不会动你的 `sy.ogg`。
@@ -170,26 +180,30 @@ python tests/test_gui.py       # 界面冒烟（8 个页签全建一遍）
 ```
 huaji1-save-editor/
 ├─ src/                     应用本体（PyInstaller 的入口也在这里）
-│  ├─ huaji1_save_editor.py tkinter 界面（8 页签，主程序入口）
+│  ├─ huaji1_save_editor.py tkinter 界面（9 页签，主程序入口）
 │  ├─ doctree.py            游戏语义层 Doc：角色/召唤兽/物品栏/开关/保存 + 字段注释表
 │  ├─ patchwriter.py        写入引擎：区间补丁、整块重写、物品实例构造
 │  ├─ marshal_ruby.py       Ruby Marshal 解析/序列化（对象编号规则与 Ruby 对齐）
 │  ├─ codec.py              容器解析、TP.dll 加解密、32 位宿主桥、LockNumber
 │  ├─ paths.py              开发期辅助：定位游戏目录、sys.path 引导
+│  ├─ backup.py             存档备份 / 恢复 / 备注（【存档管理】页）
 │  ├─ tables/
-│  │  └─ pet_table.py       $pet 名字表（由 tools/gen_pet_table.py 从游戏脚本生成）
+│  │  ├─ pet_table.py       $pet 名字表（由 tools/gen_pet_table.py 从游戏脚本生成）
+│  │  └─ db_table.py        技能名/描述・物品名・武器名・人物模板名・职业名
+│  │                        （由 tools/gen_db_table.py 从游戏 Data\*.rxdata 生成）
 │  └─ native/
 │     └─ XJCodec32.cs/.exe  32 位加解密宿主（源码 + 预编译）
 ├─ tools/                   构建与维护脚本
 │  ├─ build.py              一键打包
 │  ├─ build_host.py         只编译 32 位宿主
 │  ├─ gen_pet_table.py      从游戏脚本重新生成 pet_table.py
+│  ├─ gen_db_table.py       从游戏 Data\*.rxdata 重新生成 db_table.py
 │  └─ repair_pet_names.py   一次性修复：把召唤兽 @name 改回模板本名
 ├─ tests/                   pytest 风格的独立测试脚本（自带断言与统计）
 ├─ probes/                  逆向探针：扫脚本关键词、对比存档结构、导出物品表
 ├─ docs/                    开发辅助文档（见下）
 ├─ 使用说明.txt             随 exe 分发的说明书
-├─ CHANGELOG.md             0.1 ~ 1.0 的完整变更记录
+├─ CHANGELOG.md             0.1 ~ 1.4.0 的完整变更记录
 ├─ LICENSE                  MIT（只覆盖本仓库自己写的代码）
 ├─ NOTICE.md                授权范围与例外：游戏素材 / 反编译脚本 / 附带的 dll
 └─ README.md
@@ -213,6 +227,7 @@ huaji1-save-editor/
 
 | 版本 | 主要变化 |
 |---|---|
+| **1.4.0** | 新功能：**存档管理**（保存前自动备份 + 恢复/删除/备注）；修「技能名去读游戏目录」导致**别人机器上打不开召唤兽页**；召唤兽页版式对齐画迹2（1220x800 下不再被切）；发布包从 5 个附件改成**一个 zip**（避免有人漏下 `XJCodec32.exe`） |
 | **1.3.1** | 修 v1.3 的【克隆技能…】报 `TclError: bad window path name`（按钮回调里同步销毁窗口） |
 | **1.3** | 新功能：召唤兽**技能克隆**（把一只的整张技能表复制给另一只，源不变） |
 | **1.2** | 修召唤兽列表少一只（`$game_actors.@data[槽位]` 可能是 `'@N'` 链接）；召唤兽技能表新增「技能描述」列，搜索技能也能按描述搜 |

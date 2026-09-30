@@ -159,6 +159,24 @@ def _run(root):
         root.update()
         rows = [app.tv_skill.item(i, 'values') for i in app.tv_skill.get_children()]
         print('召唤兽 %s 当前技能 %d 个：%s' % (pet_id, len(rows), rows[:3]))
+
+        # 1.4：技能说明 / 详细信息两块只读框必须真填上内容
+        #      （技能表只放 id + 名字，描述改由说明框显示 —— 画迹2 同款版式）
+        kids = app.tv_skill.get_children()
+        if kids:
+            app.tv_skill.selection_set(kids[0])
+            root.update()
+            sid0 = int(app.tv_skill.item(kids[0], 'values')[0])
+            # ⚠ skill_desc() 返回的就是 str，别再过 MOD.stext（它只吃节点，会把 str 变空）
+            want = (doc.skill_desc(sid0) or '').strip()
+            got = app.txt_skill_desc.get('1.0', 'end').strip()
+            print('技能说明框（技能 %d）：%s'
+                  % (sid0, 'OK' if got == want
+                     else '失败 want=%r got=%r' % (want[:20], got[:20])))
+        info = app.txt_pet.get('1.0', 'end').strip()
+        print('详细信息框：%s'
+              % ('OK' if ('槽位' in info and '技能' in info)
+                 else '失败 %r' % info[:40]))
         print('资质/成长/忠诚回填：%s / %s / %s'
               % (app.pet_vars['@攻击资质'].get(), app.pet_vars['@成长'].get(),
                  app.pet_vars['@loyal'].get()))
@@ -307,6 +325,20 @@ def _run(root):
     app.on_actor_group_change()
     root.update()
     print('切回人物：表中 %d 个' % len(app.actor_rows))
+
+    # ★ 版式预算（2026-09-30 加）：「窗口高 800 下 root 的请求高度 <= 800」。
+    #   高度不可滚 —— 请求超出窗口就是有控件真被切掉，这正是 1.4.0 那条
+    #   「召唤兽页展示不完整」的直接回归守卫（当时召唤兽页要 727px，可用只有 ~640）。
+    bw, bh = [int(x) for x in V.WIN_SIZE.split('x')]
+    for _grp in ('person', 'pet'):
+        app.nb.select(2)
+        app.var_actor_group.set(_grp)
+        app.on_actor_group_change()
+        root.update_idletasks()
+        _rh = root.winfo_reqheight()
+        print('版式预算 · %-6s root reqheight=%d / %d （%s）'
+              % (_grp, _rh, bh,
+                 'OK' if _rh <= bh else '失败 超 %d' % (_rh - bh)))
 
     # ---- 全局搜索 + 跳转 ----
     for kw in ('二郎', '@skills', '成长'):

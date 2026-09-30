@@ -24,9 +24,22 @@ try:
 except Exception:                           # pragma: no cover
     _PET_TABLE_MOD = None
 
+try:
+    # 由 tools/gen_db_table.py 生成：Skills/Items/Weapons/Actors/Classes 的 @name
+    # （Skills 还有 @description）。**名字一律先查它** —— 不再依赖对方机器上的
+    # Data/*.rxdata：那些文件未必在、未必同版本、甚至可能被加密过。
+    from tables import db_table as _DB_TABLE_MOD
+except Exception:                           # pragma: no cover
+    _DB_TABLE_MOD = None
+
+#: 表键 -> 游戏里的文件名（只有"内嵌表也没有"时才回头去读）
+DB_FILES = {'data_skills': 'Skills.rxdata', 'data_items': 'Items.rxdata',
+            'data_weapons': 'Weapons.rxdata', 'data_armors': 'Armors.rxdata',
+            'data_actors': 'Actors.rxdata', 'data_classes': 'Classes.rxdata'}
+
 # 项目元信息（界面、文档、打包都用它，只维护这一处）
 APP_NAME = '画迹1：落日情缘 存档工具'
-APP_VERSION = '1.3.1'
+APP_VERSION = '1.4.0'
 AUTHOR = 'huxc573'
 HOMEPAGE = 'https://github.com/huxc573/huaji1-save-editor'
 LICENSE_NAME = 'MIT License'
@@ -416,7 +429,29 @@ CHANGELOG = ("""【画迹1：落日情缘】存档工具 —— 更新日志
 版本规则：0.1 ~ 0.7 是开发期迭代，v1.0 首次公开发布，v1.1~v1.2 修 bug，v1.3 起加功能
 ================================================================
 
-""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.3.1 2026-09-12 （修：点【克隆技能…】报 bad window path name）
+""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.4.0 2026-09-30 （新功能：存档管理；修「技能名依赖游戏目录」；召唤兽页照画迹2 重排）
+----------------------------------------------------------------
+[修] 技能名 / 物品名这类表**存档里没有**，会回退去读游戏目录的 Data/*.rxdata，
+  而旧版解析失败没有兜底 —— 文件缺失 / 游戏版本不同 / 那是加密过的 .rxdata 时
+  直接抛 MarshalError（"未知类型 'l' (0x6C)"、"序列化嵌套过深"），
+  整个召唤兽页打不开，换存档也没用。现在这些名字表（技能名+描述 / 物品名 /
+  武器名 / 人物模板名 / 职业名）**内置进程序**（src/tables/db_table.py），
+  查名字先查内置表；读文件只当兜底，**读不到就降级成空表、绝不抛异常**。
+[改] 召唤兽页照画迹2 重排：一览表 -> 「改字段」整行 -> 左「字段 / 当前值」两列表
+  + 右「常用（技能）」|「详细信息」。旧版式整页要 768px 高，而窗口 800 减掉
+  顶栏后只有约 640px 可用（高度不可滚），技能表最后两行和横向滚动条被切在窗口外。
+  改完 root 的请求高度 795 <= 800，9 个页签全部进预算。
+  技能描述改到表下的只读说明框显示（那一列 430px 会把右半栏顶出窗口）。
+[新] 【存档管理】页（第 2 个页签）：每次保存前自动留一份带时间戳的备份
+  （Audio\\BGM\\.huaji1-save-editor\\sy.<时间戳>.ogg）。可【恢复选中】/
+  【恢复最新】/【删除选中】/【删除无备注】/【编辑备注】/【打开目录】，
+  双击列表直接恢复；恢复前会先把当前存档另存一份。
+[改] 发布包：5 个附件 -> 1 个 zip（以前总有人只下 exe、漏掉 XJCodec32.exe，
+  然后报"读不了存档"）。
+[修] 备份列表刷新后选中会丢 -> "编辑备注"之后点"恢复选中"永远提示"先选中一份"；
+  现在刷新按路径恢复选中。
+
+""" + """1.3.1 2026-09-12 （修：点【克隆技能…】报 bad window path name）
 ----------------------------------------------------------------
 * 对话框的按钮不能在自己的回调里同步 destroy()：ttk 的按钮绑定脚本
   调完 -command 后还会去操作这个按钮（复位 pressed 等），窗口没了就报
@@ -845,25 +880,62 @@ class Doc(object):
             if isinstance(node, M.ArrayNode):
                 arr = node.items                 # 存档里有这个顶层对象
             else:
-                p = self._data_file(fallback)    # 否则去游戏 Data 目录里找
+                # 否则去游戏 Data 目录里找。⚠ 读不到 / 读不懂**都不许抛**：
+                # 别人机器上的 Data/*.rxdata 可能不在、可能是别的版本、
+                # 甚至被加密过 —— 以前这里直接抛 MarshalError，用户那边
+                # 一进召唤兽页就弹「未知类型 'l' (0x6C) @…」，技能名整片空掉。
+                # 现在一律降级成空表，名字由内嵌的 tables/db_table.py 顶上。
+                p = self._data_file(fallback)
                 if p:
-                    with open(p, 'rb') as f:
-                        ent = M.parse_stream(f.read())
-                    if ent and isinstance(ent[0]['node'], M.ArrayNode):
-                        arr = ent[0]['node'].items
+                    try:
+                        with open(p, 'rb') as f:
+                            ent = M.parse_stream(f.read())
+                        if ent and isinstance(ent[0]['node'], M.ArrayNode):
+                            arr = ent[0]['node'].items
+                    except Exception as e:
+                        self._cache.setdefault('db_bad', []).append(
+                            (fallback, str(e)))
             self._cache[which] = arr or []
         return self._cache[which]
 
-    def _name(self, which, fallback, idx):
-        arr = self._db(which, fallback)
-        if 0 <= idx < len(arr) and isinstance(arr[idx], M.ObjNode):
+    def db_bad_files(self):
+        """读不出来的游戏数据库文件 [(文件名, 原因)]，诊断用。"""
+        return list(self._cache.get('db_bad') or [])
+
+    # ---- 内嵌名字表（tables/db_table.py，由 tools/gen_db_table.py 生成）----
+    def _embed(self, which, kind='NAMES'):
+        if _DB_TABLE_MOD is None:
+            return ()
+        return getattr(_DB_TABLE_MOD, kind, {}).get(which) or ()
+
+    def embed_name(self, which, idx):
+        """内嵌名字；该 id 是空占位（游戏里的空槽）就返回 None。"""
+        t = self._embed(which, 'NAMES')
+        if isinstance(idx, int) and 0 <= idx < len(t):
+            return t[idx] or None
+        return None
+
+    def db_name_raw(self, which, idx):
+        """原始 @name（不加工）。**内嵌表优先**，内嵌没有才回头读游戏文件。"""
+        nm = self.embed_name(which, idx)
+        if nm:
+            return nm
+        arr = self._db(which, DB_FILES.get(which, which + '.rxdata'))
+        if isinstance(idx, int) and 0 <= idx < len(arr) \
+                and isinstance(arr[idx], M.ObjNode):
             n = arr[idx].get('@name')
             if isinstance(n, M.StrNode):
-                s = n.str()
-                # 0045：装备名被重载为 "名字,HP,SP,等级"
-                if which in ('data_weapons', 'data_armors'):
-                    s = s.split(',')[0]
-                return s
+                return n.str()
+        return None
+
+    def _name(self, which, fallback, idx):
+        """id -> 名字（内嵌表优先；fallback 参数只为兼容旧调用）。"""
+        s = self.db_name_raw(which, idx)
+        if s:
+            # 0045：装备名被重载为 "名字,HP,SP,等级"
+            if which in ('data_weapons', 'data_armors'):
+                s = s.split(',')[0]
+            return s
         return '?'
 
     def item_name(self, i):
@@ -1401,10 +1473,13 @@ class Doc(object):
             p = os.path.join(os.path.dirname(self.path), fname)
             arr = []
             if os.path.exists(p):
-                with open(p, 'rb') as f:
-                    ent = M.parse_stream(f.read())
-                if ent and isinstance(ent[0]['node'], M.ArrayNode):
-                    arr = ent[0]['node'].items
+                try:                  # 读不懂就当没有，不许因此弹错
+                    with open(p, 'rb') as f:
+                        ent = M.parse_stream(f.read())
+                    if ent and isinstance(ent[0]['node'], M.ArrayNode):
+                        arr = ent[0]['node'].items
+                except Exception:
+                    arr = []
             self._cache[key] = arr
         return self._cache[key]
 
@@ -1424,14 +1499,12 @@ class Doc(object):
         for which_db, i in ids:
             if not i:
                 continue
-            arr = self._db(which_db, which_db.replace('data_', '').capitalize() + '.rxdata')
-            if 0 <= i < len(arr) and isinstance(arr[i], M.ObjNode):
-                nm = arr[i].get('@name')
-                if isinstance(nm, M.StrNode):
-                    parts = nm.str().split(',')
-                    idx = 1 if which == 'hp' else 2
-                    if len(parts) > idx and parts[idx].strip().lstrip('-').isdigit():
-                        total += int(parts[idx])
+            nm = self.db_name_raw(which_db, i)
+            if nm:
+                parts = nm.split(',')
+                idx = 1 if which == 'hp' else 2
+                if len(parts) > idx and parts[idx].strip().lstrip('-').isdigit():
+                    total += int(parts[idx])
         return total
 
     def actor_maxhp(self, aid):
@@ -1778,7 +1851,17 @@ class Doc(object):
     # 游戏脚本 0044：learn_skill -> @skills.push(id); @skills.sort!
     #               forget_skill -> @skills.delete(id)
     def skill_templates(self):
-        """技能模板表：(id, 名字, 说明)（存档里没有它，读游戏 Data/Skills.rxdata）。"""
+        """技能模板表：(id, 名字, 说明)。
+
+        存档里**没有**技能表，以前只能去读游戏目录的 Data/Skills.rxdata ——
+        那正是"别人那边技能名读不出来"的根。现在优先用随包内嵌的
+        tables/db_table.py（由 tools/gen_db_table.py 生成），
+        内嵌表不存在时才回头读游戏文件。
+        """
+        names = self._embed('data_skills', 'NAMES')
+        if names:
+            return [(i, nm, self.skill_desc(i))
+                    for i, nm in enumerate(names) if nm]
         out = []
         arr = self._db('data_skills', 'Skills.rxdata')
         for i, s in enumerate(arr):
@@ -1795,6 +1878,10 @@ class Doc(object):
         return ' '.join(d.split())
 
     def skill_name(self, sid):
+        """技能名（内嵌表优先；内嵌表没有这个 id 才去读游戏文件）。"""
+        nm = self.embed_name('data_skills', sid)
+        if nm:
+            return nm
         arr = self._db('data_skills', 'Skills.rxdata')
         if isinstance(sid, int) and 0 <= sid < len(arr) \
                 and isinstance(arr[sid], M.ObjNode):
@@ -1804,7 +1891,10 @@ class Doc(object):
         return '技能%d' % sid
 
     def skill_desc(self, sid):
-        """技能说明（Data/Skills.rxdata 的 @description），没有就空串。"""
+        """技能说明（内嵌表优先），没有就空串。"""
+        t = self._embed('data_skills', 'DESCS')
+        if isinstance(sid, int) and 0 <= sid < len(t) and t[sid]:
+            return t[sid]
         arr = self._db('data_skills', 'Skills.rxdata')
         if isinstance(sid, int) and 0 <= sid < len(arr) \
                 and isinstance(arr[sid], M.ObjNode):
@@ -2001,6 +2091,10 @@ class Doc(object):
         if arr is None:
             raise E.EditError('存档里找不到容器 %s' % key)
         items = self._db('data_items', 'Items.rxdata')
+        if not items:
+            raise E.EditError('拿不到物品模板表：存档里没有 $data_items，'
+                              '游戏目录里也找不到 Items.rxdata。\n'
+                              '（把工具放回游戏目录，或设 XJ_GAME 指向游戏根目录）')
         sid = int(standard_id)
         if not (0 <= sid < len(items)):
             raise E.EditError('物品 id %s 不存在（可用范围 0 ~ %d）'

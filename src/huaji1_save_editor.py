@@ -45,6 +45,7 @@ _setup_tcl_env()
 
 import traceback
 
+import backup
 import codec as C
 import patchwriter as E
 import marshal_ruby as M
@@ -160,11 +161,15 @@ HELP_TEXT = """【画迹1：落日情缘】存档工具 %s
     是干什么的、技能 id 对应哪个技能、物品实例用的哪个模板…）；
     全局搜索（搜字段名或值，双击结果跳到树上）；
     对着标量字段右键 ->「修改这个值…」
-  每次修改后界面立刻刷新；保存时会：自动备份 sy.ogg.bak → 重新加密写回 →
-  读回校验。
+  * 「存档管理」页：立即备份 / 编辑备注 / 恢复选中 / 恢复最新 / 删除选中 /
+    删除无备注 / 删除非最新 / 打开备份目录；备份放在存档旁边的
+    .huaji1-save-editor 目录里（多份带时间戳，和 sy.ogg.bak 不是一回事）
+  每次修改后界面立刻刷新；保存时会：自动备份 sy.ogg.bak + 在「存档管理」里
+  留一份时间戳备份 → 重新加密写回 → 读回校验。
 
 六、注意
   * 改存档有风险，请先自己另外备份一份 sy.ogg。
+  * 改坏了先到「存档管理」页点「恢复最新」，那是上一次修改前的存档。
   * 修改前请先退出游戏（文件被占用会导致保存失败）。
   * 保存后建议先进游戏确认，再继续大改。
   * 召唤兽技能模板来自 Data/Skills.rxdata（工具会自动向上找游戏的 Data 目录）；
@@ -208,6 +213,10 @@ def istxt(s):
         return True
 
 
+# 窗口设计尺寸：版式预算的唯一来源 —— test_gui.py 拿它当「不裁」的判据
+WIN_SIZE = '1220x800'
+
+
 class App(object):
     def __init__(self, root, save_path=None):
         import tkinter as tk
@@ -227,7 +236,7 @@ class App(object):
         self.pack_rows = {}
 
         root.title(TITLE)
-        root.geometry('1120x760')
+        root.geometry(WIN_SIZE)
 
         self._build_top(save_path)
         self._build_notebook()
@@ -312,6 +321,9 @@ class App(object):
         ttk.Button(g, text='应用', command=self.apply_quick).grid(
             row=len(rows), column=1, sticky='w', pady=8)
 
+        # ---- 1.5 存档管理（备份 / 恢复）----
+        self._tab_saves()
+
         # ---- 2 全部解析数据（全局搜索 + 双击跳转）----
         f2 = ttk.Frame(self.nb, padding=8)
         self.nb.add(f2, text='全部解析数据')
@@ -379,7 +391,7 @@ class App(object):
                                        command=self.tree_copy)
         self.tree_menu_obj.add_command(label='重新载入整棵树（丢弃焦点）',
                                        command=self.fill_tree)
-        self.txt_node = tk.Text(right, wrap='word')
+        self.txt_node = tk.Text(right, wrap='word', width=40, height=10)
         vs3 = ttk.Scrollbar(right, orient='vertical', command=self.txt_node.yview)
         self.txt_node.configure(yscrollcommand=vs3.set)
         self.txt_node.pack(side='left', fill='both', expand=True)
@@ -447,7 +459,7 @@ class App(object):
             self.tv_actor.column(c, width=68, anchor='center')
         self.tv_actor.column('name', width=110)
         self.tv_actor.column('class', width=88)
-        self.tv_actor.column('where', width=118)
+        self.tv_actor.column('where', width=96)
         self.tv_actor.pack(fill='x')
         self.tv_actor.bind('<<TreeviewSelect>>', lambda e: self.load_actor_edit())
 
@@ -464,7 +476,7 @@ class App(object):
                   ('@maxsp_plus', 'SP加成', 6)]
         for i, (ivar, label, w) in enumerate(fields):
             r, c = i % 10, (i // 10) * 3
-            ttk.Label(e, text=label, width=9).grid(row=r, column=c, sticky='w', pady=2)
+            ttk.Label(e, text=label, width=9).grid(row=r, column=c, sticky='w')
             var = tk.StringVar()
             ttk.Entry(e, textvariable=var, width=w).grid(row=r, column=c + 1, sticky='w')
             self.actor_vars[ivar] = var
@@ -480,7 +492,8 @@ class App(object):
                    command=lambda: self.actor_preset('attr')).pack(fill='x', pady=2)
         ttk.Button(btns, text='活力/体力150',
                    command=lambda: self.actor_preset('vital')).pack(fill='x', pady=2)
-        self.txt_actor = tk.Text(self.fr_person, height=6, wrap='word')
+        self.txt_actor = tk.Text(self.fr_person, height=4, width=60,
+                                 wrap='word')
         vsa = ttk.Scrollbar(self.fr_person, orient='vertical',
                             command=self.txt_actor.yview)
         self.txt_actor.configure(yscrollcommand=vsa.set)
@@ -488,6 +501,13 @@ class App(object):
         vsa.pack(side='left', fill='y')
 
         # ================= 召唤兽 =================
+        # 版式对齐画迹2 的召唤兽页：
+        #   一览表 → 「改字段」整行 → 左右分栏（左「字段 / 当前值」两列表，
+        #   右「常用」技能 + 「详细信息」）。
+        # 旧版是 7 行 x 5 列的输入框网格 + 底部技能区：1220x800 下整页要 727px、
+        # 可用只有约 690px，技能表最后两行和横向滚动条被切到窗口外（"展示不完整"），
+        # 所以按画迹2 重排。
+        # ⚠ 宽度预算：窗口 1220，减掉顶栏/页签边距后各块 reqwidth 必须 <= 1200。
         self.fr_pet = ttk.Frame(f3)
         colsP = ('no', 'slot', 'display', 'name', 'nameok', 'tpl', 'owner', 'level',
                  'carry', 'growth', 'loyal', 'za', 'zd', 'zt', 'zm', 'zs', 'zdd',
@@ -495,91 +515,151 @@ class App(object):
         headsP = ('序', '槽位', '显示名', '原名', '名字表', '模板', '主人', '等级',
                   '携带等级', '成长', '忠诚', '攻资', '防资', '体资', '法资', '速资',
                   '躲资', '技能', '状态')
-        self.tv_pet = ttk.Treeview(self.fr_pet, columns=colsP, show='headings', height=7)
+        # 列宽合计 1058：连竖滚动条一起也塞得下 1220 的窗口（改列宽要连着算总宽）
+        self.tv_pet = ttk.Treeview(self.fr_pet, columns=colsP, show='headings',
+                                   height=6, selectmode='browse')
         for c, h, w in zip(colsP, headsP,
-                           (34, 52, 96, 84, 60, 120, 78, 44, 66, 50, 50, 48, 48,
-                            48, 48, 48, 48, 44, 96)):
+                           (34, 48, 86, 76, 58, 108, 68, 42, 56, 46, 46, 44, 44,
+                            44, 44, 44, 44, 40, 86)):
             self.tv_pet.heading(c, text=h)
             self.tv_pet.column(c, width=w, anchor='center')
         self.tv_pet.tag_configure('dead', foreground='#999')
         self.tv_pet.tag_configure('badname', foreground='#c00')
-        hsp = ttk.Scrollbar(self.fr_pet, orient='horizontal', command=self.tv_pet.xview)
-        self.tv_pet.configure(xscrollcommand=hsp.set)
-        hsp.pack(side='bottom', fill='x')
+        # ⚠ pack 顺序＝防裁顺序：竖滚动条先贴右，一览表 fill='x'，横滚动条最后贴底
+        vs_pet = ttk.Scrollbar(self.fr_pet, orient='vertical',
+                               command=self.tv_pet.yview)
+        self.tv_pet.configure(yscrollcommand=vs_pet.set)
+        hs_pet = ttk.Scrollbar(self.fr_pet, orient='horizontal',
+                               command=self.tv_pet.xview)
+        self.tv_pet.configure(xscrollcommand=hs_pet.set)
+        vs_pet.pack(side='right', fill='y')
         self.tv_pet.pack(fill='x')
+        hs_pet.pack(fill='x')
         self.tv_pet.bind('<<TreeviewSelect>>', lambda e: self.load_actor_edit())
 
-        e2 = ttk.LabelFrame(self.fr_pet, text='修改选中的召唤兽（资质 / 成长 / 忠诚 / 属性）',
-                            padding=8)
-        e2.pack(fill='x', pady=6)
+        # ---- 可改字段清单（顺序 = 字段表里的顺序；值存在 self.pet_vars）----
+        self.pet_fields = [('@level', '等级'), ('@exp', '经验'), ('@hp', 'HP'),
+                           ('@sp', 'SP'), ('@tizhi', '体质'), ('@moli', '魔力'),
+                           ('@liliang', '力量'), ('@naili', '耐力'),
+                           ('@minjie', '敏捷'), ('@latent', '潜力'),
+                           ('@vitality', '活力'), ('@spirit', '体力'),
+                           ('@成长', '成长'), ('@loyal', '忠诚'),
+                           ('@攻击资质', '攻击资质'), ('@防御资质', '防御资质'),
+                           ('@体力资质', '体力资质'), ('@法力资质', '法力资质'),
+                           ('@速度资质', '速度资质'), ('@躲闪资质', '躲闪资质')]
         self.pet_vars = {}
-        pfields = [('@level', '等级'), ('@exp', '经验'), ('@hp', 'HP'), ('@sp', 'SP'),
-                   ('@tizhi', '体质'), ('@moli', '魔力'), ('@liliang', '力量'),
-                   ('@naili', '耐力'), ('@minjie', '敏捷'), ('@latent', '潜力'),
-                   ('@vitality', '活力'), ('@spirit', '体力'),
-                   ('@成长', '成长'), ('@loyal', '忠诚'),
-                   ('@攻击资质', '攻击资质'), ('@防御资质', '防御资质'),
-                   ('@体力资质', '体力资质'), ('@法力资质', '法力资质'),
-                   ('@速度资质', '速度资质'), ('@躲闪资质', '躲闪资质')]
-        for i, (ivar, label) in enumerate(pfields):
-            r, c = i % 7, (i // 7) * 3
-            ttk.Label(e2, text=label, width=10).grid(row=r, column=c, sticky='w', pady=2)
-            var = tk.StringVar()
-            ttk.Entry(e2, textvariable=var, width=9).grid(row=r, column=c + 1, sticky='w')
-            self.pet_vars[ivar] = var
-        btns2 = ttk.Frame(e2)
-        btns2.grid(row=0, column=9, rowspan=7, sticky='n', padx=10)
-        ttk.Button(btns2, text='应用召唤兽修改',
-                   command=self.apply_actor).pack(fill='x', pady=2)
-        ttk.Button(btns2, text='资质+500',
-                   command=lambda: self.pet_preset('zz')).pack(fill='x', pady=2)
-        ttk.Button(btns2, text='成长+0.1',
-                   command=lambda: self.pet_preset('growth')).pack(fill='x', pady=2)
-        ttk.Button(btns2, text='忠诚 100 / 五维+10',
-                   command=lambda: self.pet_preset('loyal')).pack(fill='x', pady=2)
-        ttk.Button(btns2, text='HP/SP 填满',
-                   command=lambda: self.actor_preset('heal')).pack(fill='x', pady=2)
+        for _ivar, _label in self.pet_fields:
+            self.pet_vars[_ivar] = tk.StringVar()
+        self.pet_cur_ivar = None
+        self.petf_rows = {}
+        self.var_pet_field = tk.StringVar()
+        self.var_pet_edit = tk.StringVar()
 
-        skf = ttk.LabelFrame(self.fr_pet, text='召唤兽技能（存档字段 @skills）', padding=6)
-        skf.pack(fill='both', expand=True)
-        skbar = ttk.Frame(skf)
-        skbar.pack(fill='x')
-        ttk.Label(skbar, text='搜索技能').pack(side='left')
+        # ---- 改字段（整行；版式同画迹2：字段只读框 + 值输入框 + 应用 + 预设）----
+        #     左边字段表选中哪一项，这两个框就切到哪一项，「应用」写的就是它。
+        #     apply_actor 仍按 self.pet_vars 全字段落一遍 —— 其余字段的值都是从存档
+        #     读出来的原值，所以效果等价于"只改了选中那一个"。
+        edit2 = ttk.Frame(self.fr_pet)
+        edit2.pack(fill='x', pady=(6, 0))
+        ttk.Label(edit2, text='改字段：').pack(side='left')
+        ttk.Entry(edit2, textvariable=self.var_pet_field, width=12,
+                  state='readonly').pack(side='left')
+        ttk.Label(edit2, text='值').pack(side='left', padx=(4, 0))
+        self.ent_petval = ttk.Entry(edit2, textvariable=self.var_pet_edit, width=14)
+        self.ent_petval.pack(side='left', padx=(4, 0))
+        ttk.Button(edit2, text='应用召唤兽修改',
+                   command=self.apply_actor).pack(side='left', padx=6)
+        # 预设：一次改一整组，和「应用」一样都作用在当前选中的那只身上
+        for _txt, _cmd in (('资质+500', lambda: self.pet_preset('zz')),
+                           ('成长+0.1', lambda: self.pet_preset('growth')),
+                           ('忠诚 100 / 五维+10', lambda: self.pet_preset('loyal')),
+                           ('HP/SP 填满', lambda: self.actor_preset('heal'))):
+            ttk.Button(edit2, text=_txt, command=_cmd).pack(side='left', padx=2)
+
+        # ---- 左右分栏：左「字段 / 当前值」，右「常用」+「详细信息」----
+        mid2 = ttk.Frame(self.fr_pet)
+        mid2.pack(fill='both', expand=True, pady=(6, 0))
+        left2 = ttk.Frame(mid2)
+        left2.pack(side='left', fill='both')
+        right2 = ttk.Frame(mid2)
+        right2.pack(side='left', fill='both', expand=True, padx=(8, 0))
+        self.tv_petf = ttk.Treeview(left2, columns=('f', 'v'), show='headings',
+                                    height=12, selectmode='browse')
+        self.tv_petf.heading('f', text='字段')
+        self.tv_petf.heading('v', text='当前值')
+        self.tv_petf.column('f', width=132, anchor='w')
+        self.tv_petf.column('v', width=104, anchor='e')
+        vsf = ttk.Scrollbar(left2, orient='vertical', command=self.tv_petf.yview)
+        self.tv_petf.configure(yscrollcommand=vsf.set)
+        vsf.pack(side='right', fill='y')
+        self.tv_petf.pack(fill='both', expand=True)
+        self.tv_petf.bind('<<TreeviewSelect>>', lambda e: self.on_pet_field_select())
+
+        # ---- 常用（技能）/ 详细信息（两列等宽，照画迹2）----
+        commonf = ttk.LabelFrame(right2, text='常用', padding=6)
+        commonf.grid(row=0, column=0, sticky='nsew', padx=(0, 4))
+        ttk.Label(commonf, text='技能（存档字段 @skills）',
+                  foreground='#555').pack(anchor='w')
+        skbar = ttk.Frame(commonf)
+        skbar.pack(fill='x', pady=(4, 0))
+        ttk.Label(skbar, text='搜索').pack(side='left')
         self.var_skill_search = tk.StringVar()
-        ske = ttk.Entry(skbar, textvariable=self.var_skill_search, width=12)
-        ske.pack(side='left', padx=4)
+        ske = ttk.Entry(skbar, textvariable=self.var_skill_search, width=8)
+        ske.pack(side='left', padx=3)
         ske.bind('<KeyRelease>', lambda e: self.filter_skill_templates())
         self.var_skill_add = tk.StringVar()
-        self.cb_skill = ttk.Combobox(skbar, textvariable=self.var_skill_add, width=30)
+        self.cb_skill = ttk.Combobox(skbar, textvariable=self.var_skill_add,
+                                     width=18)
         self.cb_skill.pack(side='left')
-        ttk.Button(skbar, text='学会技能',
-                   command=self.skill_add).pack(side='left', padx=6)
-        ttk.Button(skbar, text='忘掉选中',
+        # ⚠ 四个按钮另起一行：挤在搜索框/下拉框后面会把下拉框压没（画迹2 同款教训）
+        skbtn = ttk.Frame(commonf)
+        skbtn.pack(fill='x', pady=(4, 0))
+        ttk.Button(skbtn, text='学会技能',
+                   command=self.skill_add).pack(side='left', padx=(0, 4))
+        ttk.Button(skbtn, text='忘掉选中',
                    command=self.skill_del).pack(side='left')
-        ttk.Button(skbar, text='清空技能',
-                   command=self.skill_clear).pack(side='left', padx=6)
-        ttk.Button(skbar, text='克隆技能…',
+        ttk.Button(skbtn, text='清空技能',
+                   command=self.skill_clear).pack(side='left', padx=4)
+        ttk.Button(skbtn, text='克隆技能…',
                    command=self.skill_clone).pack(side='left')
-        self.lb_skill_info = ttk.Label(skbar, text='', foreground='#888')
-        self.lb_skill_info.pack(side='left', padx=6)
-        skbox = ttk.Frame(skf)
-        skbox.pack(fill='both', expand=True)
-        self.tv_skill = ttk.Treeview(skbox, columns=('id', 'name', 'desc'),
-                                     show='headings', height=6)
+        self.lb_skill_info = ttk.Label(commonf, text='', foreground='#888')
+        self.lb_skill_info.pack(anchor='w')
+        # 技能说明单独一块只读框：描述动辄几十字，塞进表格列会被切（画迹2 同样做法）。
+        # ⚠ tk.Text 必须显式 width/height —— 默认 80x24 = 566x460px，会把页签顶出窗口。
+        # pack 顺序也是防裁的一环：说明框先贴底，技能表放最后挨刀（它自带滚动条）。
+        self.txt_skill_desc = tk.Text(commonf, height=2, width=40, wrap='word',
+                                      relief='flat', highlightthickness=1,
+                                      highlightbackground='#ddd',
+                                      font=('Microsoft YaHei UI', 9),
+                                      state='disabled')
+        self.txt_skill_desc.pack(side='bottom', fill='x', pady=(4, 0))
+        skbox = ttk.Frame(commonf)
+        skbox.pack(fill='both', expand=True, pady=(4, 0))
+        # 只放 id + 名字：带一列 430px 的"描述"会把这一块顶到 674px，
+        # 而右半栏只有 ~450px —— 描述在表格里永远看不全，所以拆到上面的说明框。
+        self.tv_skill = ttk.Treeview(skbox, columns=('id', 'name'),
+                                     show='headings', height=5,
+                                     selectmode='browse')
         self.tv_skill.heading('id', text='技能 id')
-        self.tv_skill.heading('name', text='技能名（Data/Skills.rxdata）')
-        self.tv_skill.heading('desc', text='技能描述')
-        self.tv_skill.column('id', width=70, anchor='center')
-        self.tv_skill.column('name', width=210)
-        self.tv_skill.column('desc', width=430)
+        self.tv_skill.heading('name', text='技能名')
+        self.tv_skill.column('id', width=58, anchor='center')
+        self.tv_skill.column('name', width=190)
         vsk = ttk.Scrollbar(skbox, orient='vertical', command=self.tv_skill.yview)
-        hsk = ttk.Scrollbar(skbox, orient='horizontal', command=self.tv_skill.xview)
-        self.tv_skill.configure(yscrollcommand=vsk.set, xscrollcommand=hsk.set)
-        self.tv_skill.grid(row=0, column=0, sticky='nsew')
-        vsk.grid(row=0, column=1, sticky='ns')
-        hsk.grid(row=1, column=0, sticky='ew')
-        skbox.rowconfigure(0, weight=1)
-        skbox.columnconfigure(0, weight=1)
+        self.tv_skill.configure(yscrollcommand=vsk.set)
+        vsk.pack(side='right', fill='y')
+        self.tv_skill.pack(side='left', fill='both', expand=True)
+        self.tv_skill.bind('<<TreeviewSelect>>', lambda e: self.on_skill_pick())
+        self.skill_desc_of = {}
+
+        infof = ttk.LabelFrame(right2, text='详细信息', padding=6)
+        infof.grid(row=0, column=1, sticky='nsew', padx=(4, 0))
+        self.txt_pet = tk.Text(infof, height=2, width=40, wrap='word',
+                               relief='flat', highlightthickness=1,
+                               highlightbackground='#ddd',
+                               font=('Microsoft YaHei UI', 9), state='disabled')
+        self.txt_pet.pack(fill='both', expand=True)
+        right2.columnconfigure(0, weight=1, uniform='col')
+        right2.columnconfigure(1, weight=1, uniform='col')
         self.show_actor_group()
 
         self.txt_actor.configure(font=('Consolas', 10))
@@ -863,10 +943,16 @@ class App(object):
                 '确认保存',
                 '把修改写回：\n%s\n\n'
                 '· 原文件会先备份成 %s.bak\n'
+                '· 同时在「存档管理」里留一份带时间戳的备份\n'
                 '· 写回后会重新解密读回校验\n\n继续？'
                 % (self.doc.path, os.path.basename(self.doc.path)), parent=self.root):
             return
         path = self.doc.path
+        # 落盘前先在「存档管理」的目录里留一份（同一份文件 90 秒内只留一次）
+        try:
+            backup.auto_backup_once(self.doc.path)
+        except Exception:
+            pass
         try:
             changed = self.doc.changed_bytes()
             self.doc.save(path, backup=True)
@@ -888,6 +974,7 @@ class App(object):
         self.refresh_templates()
         self.fill_switches()
         self.fill_id()
+        self.saves_refresh()
 
     # ================= 概览 / 快捷修改 =================
     def fill_info(self):
@@ -1481,6 +1568,107 @@ class App(object):
         except Exception as e:
             self.err(e)
 
+    # ---- 召唤兽「字段 / 当前值」两列表（版式照画迹2 的召唤兽页）----
+    def pet_field_label(self, ivar):
+        for v, label in self.pet_fields:
+            if v == ivar:
+                return label
+        return ivar
+
+    def fill_pet_fields(self):
+        """刷新字段表；保持（或恢复）选中 —— 选中的那一行决定右边"值"框绑谁。
+
+        ⚠ Treeview 重建后必须自己把选中恢复回去，否则每次刷新都跳回第一行，
+        「改当前这只」就会静默落到别的字段上（画迹2 的一览表踩过同款坑）。
+        """
+        keep = self.pet_cur_ivar
+        self.tv_petf.delete(*self.tv_petf.get_children())
+        self.petf_rows = {}
+        for ivar, label in self.pet_fields:
+            var = self.pet_vars.get(ivar)
+            iid = self.tv_petf.insert('', 'end',
+                                      values=(label, var.get() if var else ''))
+            self.petf_rows[iid] = ivar
+        want = [iid for iid, iv in self.petf_rows.items() if iv == keep]
+        if not want and self.petf_rows:
+            want = [sorted(self.petf_rows)[0]]
+        if want:
+            self.tv_petf.selection_set(want[0])      # 触发 on_pet_field_select
+            self.tv_petf.see(want[0])
+
+    def on_pet_field_select(self):
+        """选中字段表某一行 -> 右侧「字段 / 值」两个框切到这个字段。"""
+        sel = self.tv_petf.selection()
+        if not sel:
+            return
+        ivar = self.petf_rows.get(sel[0])
+        if ivar is None:
+            return
+        self.pet_cur_ivar = ivar
+        self.var_pet_field.set(self.pet_field_label(ivar))
+        # 输入框直接绑到那个字段的 StringVar：编辑的就是它，apply_actor 读的也是它
+        var = self.pet_vars.get(ivar)
+        self.ent_petval.configure(textvariable=var if var is not None
+                                  else self.var_pet_edit)
+
+    def set_pet_info(self, txt):
+        """「详细信息」框（只读）：一览表要横滚才看得全的东西，这里摊成文字。"""
+        try:
+            self.txt_pet.configure(state='normal')
+            self.txt_pet.delete('1.0', 'end')
+            self.txt_pet.insert('1.0', txt or '')
+            self.txt_pet.configure(state='disabled')
+        except Exception:
+            pass
+
+    def show_pet_info(self):
+        r = self.current_actor_row()
+        if not r:
+            self.set_pet_info('（未选中召唤兽）')
+            return
+        ok = r['name_ok']
+        lines = [
+            '槽位 %s　模板 %s　主人 %s'
+            % (r['id'],
+               ('%s %s' % (r['tpl'], r['tpl_name']))
+               if isinstance(r['tpl'], int) else '?',
+               r['owner_name'] or '—'),
+            '显示名 %s　@name %s　名字表 %s'
+            % (r['display'], r['name'],
+               '✔ 在表里' if ok else ('⚠ 不在表里' if ok is False else '（无表）')),
+            '等级 %s　携带等级 %s　成长 %s　忠诚 %s'
+            % (r['level'], '—' if r['carry'] is None else r['carry'],
+               r['growth'], r['loyal']),
+            '资质 %s/%s/%s/%s/%s/%s（攻/防/体/法/速/躲）'
+            % (r['zz_attack'], r['zz_defense'], r['zz_tili'],
+               r['zz_magic'], r['zz_speed'], r['zz_dodge']),
+            '技能 %d 个：%s'
+            % (len(r['skills']), '、'.join(s[1] for s in r['skills']) or '（无）'),
+        ]
+        if not r['owned']:
+            lines.append('⚠ 无主（已放生）——游戏界面上不显示，改它对游戏没影响')
+        self.set_pet_info('\n'.join(lines))
+
+    def set_skill_desc(self, txt):
+        """技能说明框（只读）。描述太长，放表格列里永远看不全 —— 照画迹2 拆出来。"""
+        try:
+            self.txt_skill_desc.configure(state='normal')
+            self.txt_skill_desc.delete('1.0', 'end')
+            self.txt_skill_desc.insert('1.0', txt or '（点技能表里的一行看说明）')
+            self.txt_skill_desc.configure(state='disabled')
+        except Exception:
+            pass
+
+    def on_skill_pick(self, ev=None):
+        sel = self.tv_skill.selection()
+        if not sel:
+            return
+        try:
+            sid = int(self.tv_skill.item(sel[0], 'values')[0])
+        except Exception:
+            return
+        self.set_skill_desc(getattr(self, 'skill_desc_of', {}).get(sid, ''))
+
     def load_actor_edit(self):
         aid = self.current_actor_id()
         if aid is None or not self.doc:
@@ -1493,7 +1681,9 @@ class App(object):
             for ivar, var in self.pet_vars.items():
                 v = MOD.vof(a.get(ivar))
                 var.set('' if v is None else str(v))
+            self.fill_pet_fields()
             self.fill_skills(aid)
+            self.show_pet_info()
             return
         for ivar, var in self.actor_vars.items():
             v = MOD.vof(a.get(ivar))
@@ -1636,6 +1826,8 @@ class App(object):
             self.tv_skill.delete(*self.tv_skill.get_children())
         except Exception:
             return
+        self.skill_desc_of = {}
+        self.set_skill_desc('')
         if not self.doc:
             return
         if aid is None:
@@ -1643,7 +1835,8 @@ class App(object):
         if aid is None:
             return
         for sid, name, desc in self.doc.actor_skills(aid):
-            self.tv_skill.insert('', 'end', values=(sid, name, desc))
+            self.tv_skill.insert('', 'end', values=(sid, name))
+            self.skill_desc_of[sid] = desc or ''
 
     @staticmethod
     def _skill_preview(skills, n=3):
@@ -2102,6 +2295,356 @@ class App(object):
         self.set_status('明文已导出：%s' % p)
 
 
+    # ================= 存档管理（备份 / 恢复）=================
+    def confirm(self, title, text):
+        """问一句“要不要”。
+
+        走一层包装：测试里把 messagebox 换成“只记录”的假对象，
+        没有 askyesno 时就当“确认”（不然一调就 AttributeError）。
+        """
+        from tkinter import messagebox
+        fn = getattr(messagebox, 'askyesno', None)
+        if fn is None:
+            return True
+        return bool(fn(title, text, parent=self.root))
+
+    def _tab_saves(self):
+        """存档管理：备份 / 删备份 / 恢复选中 / 恢复最新 / 删除非最新。
+
+        备份放在**存档旁边**的子目录里（默认 .huaji1-save-editor），只做文件复制、
+        不解析内容 —— 万一存档被改坏了，这里也能救回来。
+        ⚠ 和保存时自动写的 sy.ogg.bak 不是一回事：.bak 只留上一份、会被下一次
+        保存覆盖；这里是多份带时间戳的历史，恢复时不会互相盖掉。
+        """
+        tk, ttk = self.tk, self.ttk
+        f = ttk.Frame(self.nb, padding=8)
+        self.tab_saves = f
+        self.nb.add(f, text='存档管理')
+
+        self.var_saves_info = tk.StringVar(value='存档管理：—')
+        ttk.Label(f, textvariable=self.var_saves_info, justify='left',
+                  font=('Microsoft YaHei UI', 10),
+                  wraplength=1080).pack(anchor='w')
+        ttk.Label(f, foreground='#777', justify='left',
+                  text='备份目录就在存档旁边（.huaji1-save-editor，隐藏项）；'
+                       '「恢复最新」＝把上一次修改之前的存档换回来；'
+                       '「删除非最新」只清自动备份，最新的一份和手动备份都留着。'
+                  ).pack(anchor='w', pady=(2, 6))
+
+        bar = ttk.Frame(f)
+        bar.pack(fill='x')
+        for text, cmd in (('立即备份', self.saves_backup),
+                          ('编辑备注', self.saves_edit_note),
+                          ('恢复选中', self.saves_restore),
+                          ('恢复最新', self.saves_restore_newest),
+                          ('删除选中', self.saves_delete),
+                          ('删除无备注', self.saves_delete_no_note),
+                          ('删除非最新', self.saves_delete_old),
+                          ('刷新', self.saves_refresh),
+                          ('打开备份目录', self.saves_open_dir)):
+            ttk.Button(bar, text=text, command=cmd).pack(side='left', padx=(0, 6))
+
+        self.tv_saves = ttk.Treeview(
+            f, columns=('idx', 'time', 'kind', 'size', 'name', 'note'),
+            show='headings', height=16, selectmode='extended')
+        for c, w, t in (('idx', 40, '#'), ('time', 150, '时间'),
+                        ('kind', 72, '类型'), ('size', 78, '大小'),
+                        ('name', 268, '文件'), ('note', 372, '备注')):
+            self.tv_saves.heading(c, text=t)
+            self.tv_saves.column(c, width=w, anchor='w')
+        vs = ttk.Scrollbar(f, orient='vertical', command=self.tv_saves.yview)
+        self.tv_saves.configure(yscrollcommand=vs.set)
+        vs.pack(side='right', fill='y')
+        self.tv_saves.pack(fill='both', expand=True, pady=6)
+        self.tv_saves.bind('<Double-1>', lambda e: self.saves_restore())
+        self.save_rows = []
+
+    def saves_dir(self):
+        if not self.doc:
+            return None
+        return backup.backup_dir(self.doc.path, create=False)
+
+    def _saves_ready(self):
+        """存档管理能不能动手 —— 只要求“确实打开过一份存档”。
+
+        本作的 Doc 在构造时就会校验文件头（不是 sy.ogg 直接抛 CodecError，
+        self.doc 也不会被换成那个文件），所以 self.doc 有值就等于“这是真存档”，
+        不像画迹2 还得再看一层 SaveDoc —— 也就不会出现“拿非存档文件去备份、
+        在人家目录里堆一堆垃圾”那种事。
+        """
+        from tkinter import messagebox
+        if not self.doc:
+            messagebox.showinfo('提示', '先打开一个存档（Audio\\BGM\\sy.ogg）。',
+                                parent=self.root)
+            return False
+        return True
+
+    def saves_refresh(self, keep=None):
+        """重扫备份目录填表格（只读，不建目录、不写文件）。
+
+        keep：刷新后要重新选中的备份路径；不给就沿用刷新前选中的那些 ——
+        否则「编辑备注」点完一刷新选中就没了，接着点「恢复选中」只会收到
+        “先在列表里选中一份备份”（自己刚选的那份被清掉了）。
+        """
+        if keep is None:
+            keep = [r['path'] for r in self._save_sel(quiet=True)]
+        self.tv_saves.delete(*self.tv_saves.get_children())
+        self.save_rows = []
+        if not self.doc:
+            self.var_saves_info.set('存档管理：还没打开存档')
+            return
+        rows = backup.list_backups(self.doc.path)
+        self.save_rows = rows
+        kind_cn = {'auto': '自动', 'manual': '手动',
+                   'before-restore': '恢复前', 'other': '其它'}
+        for i, r in enumerate(rows):
+            self.tv_saves.insert('', 'end', iid='b%d' % i,
+                                 values=(i + 1,
+                                         r['stamp'].replace('_', ' ') or '—',
+                                         kind_cn.get(r['kind'], r['kind']),
+                                         '%.1f KB' % (r['size'] / 1024.0),
+                                         r['name'], r['note']))
+        want = set(keep)
+        sel = ['b%d' % i for i, r in enumerate(rows) if r['path'] in want]
+        if sel:
+            self.tv_saves.selection_set(sel)
+        d = backup.backup_dir(self.doc.path, create=False)
+        self.var_saves_info.set(
+            '当前存档：%s\n备份目录：%s（共 %d 份，合计 %.1f MB）'
+            % (self.doc.path, d, len(rows),
+               sum(r['size'] for r in rows) / 1048576.0))
+
+    def saves_backup(self):
+        """立即备份：复制一份存档到备份目录，再弹窗让玩家填备注（可留空）。"""
+        if not self._saves_ready():
+            return
+        try:
+            p = backup.backup(self.doc.path, backup.KIND_MANUAL)
+        except Exception as e:
+            self.err(e)
+            return
+        dlg = NoteDialog(self.root, title='备份完成 - 填备注',
+                         label='已备份到：\n%s\n\n'
+                               '备注（可留空，会存在备份旁的 .txt）：' % p)
+        self.root.wait_window(dlg)
+        note = (dlg.result or '').strip() if dlg.result is not None else ''
+        if note:
+            try:
+                backup.set_note(p, note)
+            except Exception as e:
+                self.err(e)
+        self.saves_refresh()
+        self.set_status('已备份到 %s（备注：%s）'
+                        % (os.path.basename(p), note or '无'))
+
+    def _save_sel(self, quiet=False):
+        """列表里选中的那几份（返回 saves_refresh 存下来的 row 字典）。"""
+        from tkinter import messagebox
+        sel = self.tv_saves.selection()
+        if not sel:
+            if not quiet:
+                messagebox.showinfo('提示', '先在列表里选中一份备份。',
+                                    parent=self.root)
+            return []
+        out = []
+        for iid in sel:
+            i = int(iid[1:])
+            if 0 <= i < len(self.save_rows):
+                out.append(self.save_rows[i])
+        return out
+
+    def saves_restore(self):
+        """恢复选中：用备份覆盖当前存档，然后重新载入。"""
+        from tkinter import messagebox
+        if not self._saves_ready():
+            return
+        rows = self._save_sel()
+        if not rows:
+            return
+        if len(rows) > 1:
+            messagebox.showinfo('提示', '恢复一次只能选一份。', parent=self.root)
+            return
+        r = rows[0]
+        if not self.confirm(
+                '确认恢复',
+                '要用这份备份覆盖当前存档吗？\n\n  %s\n  %s\n\n'
+                '（备份都是完整的存档副本，恢复后直接重新载入）'
+                % (r['stamp'], r['name'])):
+            return
+        try:
+            backup.restore(r['path'], self.doc.path)
+        except Exception as e:
+            self.err(e)
+            return
+        self.load(self.doc.path)          # 重新载入，界面跟着变
+        self.saves_refresh()
+        self.set_status('已恢复 %s' % r['name'])
+        messagebox.showinfo('恢复完成',
+                            '已用\n  %s\n覆盖当前存档，并重新载入。' % r['name'],
+                            parent=self.root)
+
+    def saves_restore_newest(self):
+        """恢复最新＝把**上一次修改之前**的存档换回来（列表里最新的一份）。"""
+        from tkinter import messagebox
+        if not self._saves_ready():
+            return
+        self.saves_refresh()
+        r = backup.newest(self.doc.path)
+        if r is None:
+            messagebox.showinfo('提示', '备份目录里还没有备份。', parent=self.root)
+            return
+        if not self.confirm(
+                '恢复最新',
+                '把存档换回**上一次修改之前**的状态吗？\n\n'
+                '  用的备份：%s\n  %s\n\n'
+                '（这份是目前最新的一份备份）' % (r['stamp'], r['name'])):
+            return
+        try:
+            backup.restore(r['path'], self.doc.path)
+        except Exception as e:
+            self.err(e)
+            return
+        self.load(self.doc.path)
+        self.saves_refresh()
+        self.set_status('已恢复到最新备份：%s' % r['name'])
+
+    def saves_delete(self):
+        """删掉列表里选中的那几份备份（连 .txt 备注一起）。"""
+        rows = self._save_sel()
+        if not rows:
+            return
+        if not self.confirm(
+                '确认删除',
+                '删掉这 %d 份备份？（不可撤销）\n\n%s'
+                % (len(rows), '\n'.join('  ' + r['name'] for r in rows[:8]))):
+            return
+        n = backup.remove([r['path'] for r in rows])
+        self.saves_refresh()
+        self.set_status('已删除 %d 份备份' % n)
+
+    def saves_delete_no_note(self):
+        """删除全部没有备注的备份（有 .txt 备注的留着）。"""
+        from tkinter import messagebox
+        if not self.doc:
+            return
+        self.saves_refresh()
+        rows = [r for r in self.save_rows if not r['note']]
+        if not rows:
+            messagebox.showinfo('删除无备注', '没有无备注的备份。', parent=self.root)
+            return
+        if not self.confirm(
+                '删除无备注',
+                '删掉 %d 份没有备注的备份？（不可撤销）\n\n%s'
+                % (len(rows), '\n'.join('  ' + r['name'] for r in rows[:8]))):
+            return
+        n = backup.remove([r['path'] for r in rows])
+        self.saves_refresh()
+        self.set_status('已删除 %d 份无备注备份' % n)
+
+    def saves_edit_note(self):
+        """给选中的备份改备注（存成备份旁边的 .txt；清空就是删备注）。"""
+        from tkinter import messagebox
+        rows = self._save_sel()
+        if not rows:
+            return
+        if len(rows) > 1:
+            messagebox.showinfo('提示', '一次只能改一份的备注。', parent=self.root)
+            return
+        r = rows[0]
+        dlg = NoteDialog(self.root, r['note'])
+        self.root.wait_window(dlg)
+        if dlg.result is None:
+            return
+        try:
+            backup.set_note(r['path'], dlg.result)
+        except Exception as e:
+            self.err(e)
+            return
+        self.saves_refresh()
+        self.set_status('已更新备注：%s' % r['name'])
+
+    def saves_delete_old(self):
+        """删除非最新＝只留最新的一份 + 所有手动备份，其余（自动备份）全删。"""
+        from tkinter import messagebox
+        if not self.doc:
+            return
+        self.saves_refresh()
+        rows = self.save_rows
+        if len(rows) < 2:
+            messagebox.showinfo('提示', '只有 %d 份备份，不用清理。' % len(rows),
+                                parent=self.root)
+            return
+        keep = backup.newest(self.doc.path) or rows[0]
+        n_manual = sum(1 for r in rows if r['kind'] == backup.KIND_MANUAL)
+        if n_manual == len(rows):
+            messagebox.showinfo('删除非最新',
+                                '全是手动备份（共 %d 份），这个操作不碰手动备份。'
+                                % len(rows), parent=self.root)
+            return
+        n_del = len(rows) - n_manual - 1     # 留最新一份 + 所有手动
+        if not self.confirm(
+                '删除非最新',
+                '留最新的一份 + 所有手动备份，其余 %d 份自动备份删掉？'
+                '（不可撤销）\n\n  保留：%s\n  %s'
+                % (n_del, keep['stamp'], keep['name'])):
+            return
+        kept, n = backup.keep_newest(self.doc.path)
+        self.saves_refresh()
+        self.set_status('已删除 %d 份自动备份，保留最新 %s'
+                        % (n, os.path.basename(kept['path']) if kept else '无'))
+
+    def saves_open_dir(self):
+        """在资源管理器里打开备份目录（还没建就提示先备份一次）。"""
+        d = self.saves_dir()
+        if not d or not os.path.isdir(d):
+            from tkinter import messagebox
+            messagebox.showinfo('提示', '备份目录还没建（先点一次「立即备份」）。',
+                                parent=self.root)
+            return
+        try:
+            os.startfile(d)                  # Windows 专用
+        except Exception:
+            self.set_status('备份目录：%s' % d)
+
+
+def NoteDialog(master, cur='', title='编辑备注', label=None):
+    """改备份备注的小窗（多行文本 + 确定/取消）。
+
+    返回一个 Toplevel：`result` 属性＝点【确定】时的文本，取消/关闭＝None。
+    用法：dlg = NoteDialog(root, r['note']); root.wait_window(dlg)
+    —— 写成函数而不是 Toplevel 子类，是为了不在模块顶层就 import tkinter
+    （本文件平时都是用到才 import 的）。
+    """
+    import tkinter as tk
+    from tkinter import ttk
+    win = tk.Toplevel(master)
+    win.result = None
+    win.title(title)
+    ttk.Label(win, text=label
+              or '备注（会存在备份旁边的 .txt；留空＝删除备注）'
+              ).pack(anchor='w', padx=8, pady=(8, 2))
+    txt = tk.Text(win, width=60, height=6, font=('Microsoft YaHei UI', 10),
+                  wrap='word')
+    vs = ttk.Scrollbar(win, orient='vertical', command=txt.yview)
+    txt.configure(yscrollcommand=vs.set)
+    vs.pack(side='right', fill='y')
+    txt.pack(fill='both', expand=True, padx=(8, 0), pady=2)
+    txt.insert('1.0', cur or '')
+    txt.focus_set()
+
+    def ok():
+        win.result = txt.get('1.0', 'end').strip()
+        win.destroy()
+
+    bar = ttk.Frame(win)
+    bar.pack(fill='x', pady=8)
+    ttk.Button(bar, text='确定', command=ok).pack(side='left', padx=8)
+    ttk.Button(bar, text='取消', command=win.destroy).pack(side='left', padx=6)
+    win.bind('<Control-Return>', lambda e: ok())
+    win.bind('<Escape>', lambda e: win.destroy())
+    return win
+
+
 def main():
     import tkinter as tk
     from tkinter import messagebox
@@ -2214,6 +2757,16 @@ def main():
                     ga = doc.ivar('game_actors', '@data')
                     note = doc.note_of('[12]', ga.items[12], ga, 'game_actors.@data')
                     lines.append('注释列示例: %s' % note)
+                    # 1.4：技能名 / 描述必须走内置表（src/tables/db_table.py）——
+                    #      别人机器上没有游戏目录、或版本不同读不了 .rxdata 时，
+                    #      这里照样得给出真名字（tests/test_bundle_db_table.py 守着）。
+                    _bad = doc.db_bad_files()
+                    lines.append('名字表: 内置 db_table（游戏目录里读不出来的: %s）'
+                                 % ('无' if not _bad
+                                    else '、'.join(b[0] for b in _bad)))
+                    lines.append('技能名自检: 1=%s / 9=%s 9的描述=%s'
+                                 % (doc.skill_name(1), doc.skill_name(9),
+                                    doc.skill_desc(9)[:18] or '（空）'))
                     if pets:
                         pid0, nm0 = pets[0]['id'], pets[0]['name']
                         doc.set_actor_custom_name(pid0, '自检改名')

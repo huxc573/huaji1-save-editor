@@ -8,6 +8,8 @@
        画迹1存档工具.exe + XJCodec32.exe + TP.dll + Socket.dll + 使用说明.txt
      （TP.dll / Socket.dll 是**游戏自带**文件，从游戏目录复制，仓库里不放它们）
   3. PyInstaller 打包单文件 exe（带 tcl 库，原因见 docs/开发指南.md）
+  4. 把上面 5 个文件打成 dist/huaji1-save-editor-vX.Y.Z.zip —— **Release 只传这一个包**，
+     免得有人只下 exe、漏了 XJCodec32.exe 打不开存档
 
 用法（在仓库根目录或任意目录均可）：
     python tools/build.py              # 全部
@@ -28,23 +30,21 @@ sys.path.insert(0, SRC)
 
 from paths import game_dir as _game_dir                   # noqa: E402
 
-APP_VERSION = '1.3.1'
+APP_VERSION = '1.4.0'
 REPO_NAME = 'huaji1-save-editor'
-# 本地产物固定叫「画迹1存档工具.exe」，不带版本号；
-# 版本号只出现在 Release 附件名上（见下面的 RELEASE_EXE_NAME）。
+# 本地产物固定叫「画迹1存档工具.exe」，不带版本号；版本号只出现在发行包名上。
 EXE_NAME = '画迹1存档工具'
-RELEASE_EXE_NAME = '%s-v%s.exe' % (REPO_NAME, APP_VERSION)
 EXE_DIR = os.path.join(ROOT, 'dist')
 
+# 发行包（zip）：dist/ 里打好一个包，别人**不用再单独下依赖 exe**。
+# 本地名与 Release 上的名字一致，都是 ASCII（GitHub 会剔除资源名里的中文）。
+ZIP_NAME = '%s-v%s.zip' % (REPO_NAME, APP_VERSION)
+#: 打进 zip 的东西（dist/ 里的本地名）；解压出来就是一份能直接双击的完整工具
+ZIP_MEMBERS = [EXE_NAME + '.exe', 'XJCodec32.exe', 'TP.dll', 'Socket.dll',
+               '使用说明.txt']
+
 # 发行附件：dist/ 里的本地名 -> Release 上的 ASCII 名（**唯一来源**，release.py 读这里）。
-# GitHub 会剔除资源名里的非 ASCII 字符，所以中文名只留在本地。
-RELEASE_ASSETS = [
-    (EXE_NAME + '.exe', RELEASE_EXE_NAME),
-    ('XJCodec32.exe', 'XJCodec32.exe'),
-    ('TP.dll', 'TP.dll'),
-    ('Socket.dll', 'Socket.dll'),
-    ('使用说明.txt', 'USAGE.txt'),
-]
+RELEASE_ASSETS = [(ZIP_NAME, ZIP_NAME)]
 PY = sys.executable
 
 CSC_CANDIDATES = [
@@ -125,6 +125,26 @@ def build_exe():
     log('打包完成：%s' % os.path.join(EXE_DIR, EXE_NAME + '.exe'))
 
 
+def pack_zip():
+    r"""把 dist 里的整套文件打成一个 zip。
+
+    人最容易漏的是 XJCodec32.exe（少了它读不了存档），打成包就不会漏。
+    """
+    import zipfile
+    miss = [n for n in ZIP_MEMBERS
+            if not os.path.exists(os.path.join(EXE_DIR, n))]
+    if miss:
+        raise SystemExit('dist 里还缺 %s —— 先确认游戏目录里有 TP.dll/Socket.dll'
+                         % '、'.join(miss))
+    dst = os.path.join(EXE_DIR, ZIP_NAME)
+    with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as z:
+        for n in ZIP_MEMBERS:
+            z.write(os.path.join(EXE_DIR, n), n)
+    log('已打包发行 zip：%s（%.2f MB）'
+        % (ZIP_NAME, os.path.getsize(dst) / 1048576.0))
+    return dst
+
+
 def main():
     host = build_host()
     if '--hostonly' in sys.argv:
@@ -135,6 +155,7 @@ def main():
         log('仅准备完成（未打包）')
         return 0
     build_exe()
+    pack_zip()
     log('')
     log('发行目录 %s 内容：' % EXE_DIR)
     for n in sorted(os.listdir(EXE_DIR)):
