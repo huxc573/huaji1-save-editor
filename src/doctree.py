@@ -60,7 +60,7 @@ PET_WEAPON_ELEMENT = 98
 
 # 项目元信息（界面、文档、打包都用它，只维护这一处）
 APP_NAME = '画迹1：落日情缘 存档工具'
-APP_VERSION = '1.5.0'
+APP_VERSION = '1.5.1'
 AUTHOR = 'huxc573'
 HOMEPAGE = 'https://github.com/huxc573/huaji1-save-editor'
 LICENSE_NAME = 'MIT License'
