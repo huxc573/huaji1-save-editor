@@ -64,24 +64,39 @@ def stage_assets():
     return out
 
 
-def notes_text():
-    """CHANGELOG 里本版本的那一段 + 两行下载说明（别啰嗦，附件本来就在 Assets 顶部）。"""
-    body = ''
+def summary_lines():
+    """CHANGELOG 里本版本段的正文（剥掉 `## vX.Y.Z · 日期` 标题行与尾部 `---`）。"""
     path = os.path.join(ROOT, 'CHANGELOG.md')
-    if os.path.exists(path):
-        text = open(path, encoding='utf-8').read()
-        head = text.find('## ' + TAG)
-        if head >= 0:
-            nxt = text.find('\n## ', head + 1)
-            body = text[head:nxt if nxt > 0 else len(text)].rstrip()
-    zipname = b.RELEASE_ASSETS[0][1]
-    # 正文 = 更新总结打头（去掉 “## vX.Y.Z · 日期” 标题行），尾部免责 + 一行下载说明
+    if not os.path.exists(path):
+        return []
+    text = open(path, encoding='utf-8').read()
+    head = text.find('## ' + TAG)
+    if head < 0:
+        return []
+    nxt = text.find('\n## ', head + 1)
+    body = text[head:nxt if nxt > 0 else len(text)].rstrip()
     lines = body.split('\n')
     while lines and (lines[0].startswith('## ') or not lines[0].strip()):
         lines.pop(0)
+    while lines and lines[-1].strip() == '---':
+        lines.pop()
+    return lines
+
+
+def title_text():
+    """Release 标题 = `tag —— 更新总结`（取总结第一行，剥粗体标记）。"""
+    for ln in summary_lines():
+        t = ln.strip().replace('**', '').strip()
+        if t:
+            return '%s —— %s' % (TAG, t)
+    return TAG
+
+
+def notes_text():
+    """Release 正文 = 更新总结打头，尾部免责 + 一行下载说明。"""
+    lines = summary_lines()
     summary = '\n'.join(lines).strip()
-    while summary.endswith('---'):
-        summary = summary[:-3].rstrip()
+    zipname = b.RELEASE_ASSETS[0][1]
     tail = (
         '\n---\n\n'
         '> ⚠️ 使用前请先自己备份 `Audio\\BGM\\sy.ogg`。本工具是第三方工具，'
@@ -107,7 +122,7 @@ def main():
         cmd = ['gh', 'release', 'upload', TAG] + files + ['--clobber']
     else:
         cmd = ['gh', 'release', 'create', TAG,
-               '--title', '%s —— 见下方更新日志' % TAG,
+               '--title', title_text(),
                '--notes-file', notes] + files
     print('将执行：gh release %s %s …' % ('upload' if upload_only else 'create', TAG))
     if dry:
