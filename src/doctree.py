@@ -1044,6 +1044,30 @@ class Doc(object):
             return False
         return bool(stext(nd.get('@name'), ''))
 
+    def resolve_kind(self, sid, name, hint='item'):
+        """按「物品id 框里的名字」校正类别，返回可信的 kind。
+
+        三张模板表各自独立编号 —— 同一个 id 在 item/weapon/armor 里是三个
+        不同的模板（如 items[174]=踏云兽●孵化蛋、weapons[174]=wuli墙蛸）。
+        类别单选可能和框里的"名字"对不上（点行回填/下拉跨类都会发生），
+        名字是更强信号：hint 表里 id 对不上名字时，按名字在三类里找。
+        找不到匹配（比如手填的数字+随手名字）就信 hint，走原有校验报错。
+        """
+        if not name:
+            return hint
+        try:
+            sid = int(sid)
+        except (TypeError, ValueError):
+            return hint
+        order = [hint] + [k for k in ('item', 'weapon', 'armor') if k != hint]
+        for k in order:
+            arr = self.db_array(k)
+            if not arr or not (0 <= sid < len(arr)):
+                continue
+            if self.template_name(k, sid) == name:
+                return k
+        return hint
+
     def template_tip(self, kind, i):
         """下拉悬停 / 表格提示用：模板名 + 类别 + @description。
 
@@ -2306,9 +2330,13 @@ class Doc(object):
         return self.next_item_db_id()
 
     def pack_write(self, slot, standard_id, count=1, quality=None,
-                   key='@pack', iid=None, kind='item'):
+                   key='@pack', iid=None, kind='item', expect_name=None):
         """
         把某个容器的第 slot 格写成「模板 id = standard_id，数量 = count，品质 = quality」。
+
+        expect_name：「物品id」框里随 id 一起带的模板名（"174 | wuli墙蛸" 的后半）。
+        三张表各自编号，同 id 在三张表里是三个模板 —— 类别单选可能和名字对不上
+        （点行回填 / 下拉跨类都会发生），写入前先按名字校正 kind。
 
         关于 @id（实例编号）：游戏用 `$data_items[实例.@id]` 判断"能不能使用"，
         所以写入时必须做两件事（与游戏 random_item 完全一致）：
@@ -2324,6 +2352,7 @@ class Doc(object):
             raise E.EditError('存档里找不到容器 %s' % key)
         if kind not in KIND_TABLE:
             kind = 'item'
+        kind = self.resolve_kind(standard_id, expect_name, hint=kind)
         label = KIND_LABEL.get(kind, '物品')
         table = KIND_TABLE[kind]
         items = self.db_array(kind)

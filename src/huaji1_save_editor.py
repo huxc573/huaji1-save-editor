@@ -2284,7 +2284,12 @@ class App(object):
             self.err('请填写物品 id（可直接填数字，或先在搜索框里筛，再从下拉框里选）')
             return
         try:
-            sid = int(txt.split('|')[0].strip())
+            parts = txt.split('|', 1)
+            sid = int(parts[0].strip())
+            name = parts[1].strip() if len(parts) > 1 else ''
+            # 跨类搜索的下拉条目带"（类别）"后缀，校验名字前剥掉
+            if name.endswith('）') and '（' in name:
+                name = name[:name.rfind('（')].strip()
             cnt = int(self.var_pack_count.get().strip() or '1')
             qty = int(self.var_pack_quality.get().strip() or '100')
         except ValueError:
@@ -2294,7 +2299,8 @@ class App(object):
         had = bool(r0 and r0['item'] is not None)
         try:
             kind = self.cur_tpl_kind()
-            info = self.doc.pack_write(slot, sid, cnt, qty, key, kind=kind)
+            info = self.doc.pack_write(slot, sid, cnt, qty, key, kind=kind,
+                                       expect_name=name or None)
             self.mark_dirty()
             self._picked_tpl = False    # 写入完成，恢复"点行跟随行类别"
             self.pack_refresh(slot)

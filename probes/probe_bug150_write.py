@@ -195,6 +195,51 @@ def main():
     bad = doc.pack_scan_bad()
     check('F pack_scan_bad() = 0', not bad, repr(bad)[:120])
 
+    # ---- G 同编号名字校正（2026-10-03 用户复现：点 174 宠物武器行写入变踏云兽●孵化蛋） ----
+    # items[174]=踏云兽●孵化蛋、weapons[174]=wuli星瀚（同号不同表）：
+    # 点宠物武器行回填后 radio 停在"物品"，写入只看数字 174 就落进物品表。
+    # 现在按「物品id」框里的名字校正类别。
+    print('== G 同编号 id 按名字校正类别 ==')
+    check('G1 items[174]/weapons[174] 同号不同名',
+          doc.template_name('item', 174) == '踏云兽●孵化蛋'
+          and doc.template_name('weapon', 174) == 'wuli星瀚',
+          'item=%s weapon=%s' % (doc.template_name('item', 174),
+                                 doc.template_name('weapon', 174)))
+    es = first_empty()
+    app._picked_tpl = False
+    app.select_slot(es)                # 空格：radio=物品（复现用户点行后的状态）
+    app.var_pack_std.set('174 | wuli星瀚')
+    app.pack_apply()
+    root.update()
+    r = doc.pack_slot(es, '@pack')
+    check('G2 名字校正写入装备表的 wuli星瀚',
+          r['item'] is not None and r['kind'] == 'weapon'
+          and r['standard'] == 174 and r['name'] == 'wuli星瀚'
+          and doc.registration_state(r['iid'], r['standard'], 'weapon')[0] == 'ok',
+          info(es))
+    es2 = first_empty()
+    app._picked_tpl = False
+    app.select_slot(es2)
+    app.var_pack_std.set('174 | 踏云兽●孵化蛋')
+    app.pack_apply()
+    root.update()
+    r = doc.pack_slot(es2, '@pack')
+    check('G3 名字=物品时仍写物品表（不误伤）',
+          r['item'] is not None and r['kind'] == 'item'
+          and r['standard'] == 174 and r['name'] == '踏云兽●孵化蛋',
+          info(es2))
+    es3 = first_empty()
+    app._picked_tpl = False
+    app.select_slot(es3)
+    app.var_pack_std.set('174')        # 手填纯数字：无名字可校验，走 hint+路由
+    app.pack_apply()
+    root.update()
+    r = doc.pack_slot(es3, '@pack')
+    check('G4 纯数字+类别物品 -> items[174] 真物品',
+          r['item'] is not None and r['kind'] == 'item'
+          and r['name'] == '踏云兽●孵化蛋',
+          info(es3))
+
     ok = all(o for _n, o, _e in results)
     print('===== 探针：%s（%d/%d）====='
           % ('全部通过' if ok else '有失败',
