@@ -106,13 +106,14 @@ HELP_TEXT = """【画迹1：落日情缘】存档工具 %s
     勾上「显示无主（已放生）的召唤兽」可以看到这些残留数据（标灰色）。
     （槽位 ↔ 原始模板 的对照表在 $game_party.@现id / @原id）
 
-  ★ 改名：
+  ★ 改名：只改显示名，基础名不给动
     游戏显示名 = @new_name 存在 ? @new_name : @name（0040 Game_Battler#custom_name）。
     玩家在游戏里花 30 活力改名，写的就是 @new_name。
-    【设为显示名】写 @new_name；【改基础名】写 @name；【清除显示名】把
-    @new_name 删掉恢复本名。
+    本工具只提供【设为显示名】(写 @new_name) 和【清除显示名】(把 @new_name
+    删掉恢复本名) —— @name 是游戏拿去索引 $pet 表的键，改错就把召唤兽界面
+    搞崩，所以**没有**改基础名的入口。
 
-  ★★ 召唤兽的 @name 不能乱改（会把游戏搞崩）：
+  ★★ 为什么不动 @name（召唤兽的 @name 改错会把游戏搞崩）：
     脚本 0011 里有一张按【宠物名字】索引的表（154 个名字）：
         $pet = { "宠物名" => [六项资质, [成长…], 参战等级], ... }
     而游戏这些地方【没有 nil 判断】地查它：
@@ -125,7 +126,6 @@ HELP_TEXT = """【画迹1：落日情缘】存档工具 %s
       · 召唤兽表有「名字表」列（✔ 在表里 / ⚠ 不在表里）和「携带等级」列
         （携带等级就是 $pet[名字][7]，游戏用它判断宠物能不能参战）
       · 名字栏会实时显示校验结果
-      · 【改基础名(@name)】对召唤兽会先校验，不在表里就弹警告（可以强制）
       · 【恢复模板本名】：改回 $data_actors[模板].name（= 游戏自己的算法）
       · 【一键修复名字】：把名字异常的召唤兽批量改回去
     想换好听的名字请用【设为显示名(@new_name)】，它不参与 $pet 查表，随便改。
@@ -149,13 +149,12 @@ HELP_TEXT = """【画迹1：落日情缘】存档工具 %s
   * 召唤兽：列表顺序与游戏界面一致（可勾选“显示无主”看已放生的）；
     能改等级/HP/SP/五维/潜力/成长/忠诚/六项资质；
     能【学会技能】/【忘掉选中】/【清空技能】（带技能搜索框）
-  * 名字（人物 / 召唤兽都行）：【设为显示名(@new_name)】/【改基础名(@name)】/
+  * 名字（人物 / 召唤兽都行）：只改显示名 —— 【设为显示名(@new_name)】/
     【清除显示名(恢复原名)】；召唤兽还有【恢复模板本名】/【一键修复名字】
-    （@name 必须在游戏的 $pet 名字表里，否则召唤兽界面会报 NoMethodError）
+    （@name 不给改：它必须在 $pet 名字表里，改错召唤兽界面会报 NoMethodError）
   * 物品栏：道具 @pack / 行囊 @wallet / 备用 @talisman 三个容器切换；
     格子 / 数量 / 物品id / 品质 填好后点「写入 · 修改该格」（新增会登记）；
     「删除该格」清空；「搜索物品」填关键字或编号过滤下拉列表
-  * 开关、变量
   * 存档机器码（可一键填入本机机器码）
   * 「全部解析数据」页：字段 / 类型 / 值 / 注释 四列（注释会告诉你这个字段
     是干什么的、技能 id 对应哪个技能、物品实例用的哪个模板…）；
@@ -294,32 +293,46 @@ class App(object):
         self.nb = ttk.Notebook(self.root)
         self.nb.pack(fill='both', expand=True, padx=6, pady=4)
 
-        # ---- 1 概览 + 快捷修改 ----
+        # ---- 1 概览 + 快捷修改（版式对齐画迹2：左右 PanedWindow，中间可拖）----
         f1 = ttk.Frame(self.nb, padding=8)
         self.nb.add(f1, text='概览 / 快捷修改')
-        self.lb_info = tk.Text(f1, height=13, wrap='none')
-        self.lb_info.pack(fill='x')
-        self.lb_info.configure(font=('Consolas', 10))
+        body1 = ttk.Panedwindow(f1, orient='horizontal')
+        body1.pack(fill='both', expand=True)
 
-        g = ttk.LabelFrame(f1, text='快捷修改（先点「应用」，再点上面的「保存修改」）',
+        # ===== 左：快捷修改（4 项排成一行，画迹2 同款；竖排 4 行太占地）=====
+        g = ttk.LabelFrame(body1, text='快捷修改（先点「应用」，再点上面的「保存修改」）',
                            padding=10)
-        g.pack(fill='x', pady=8)
+        body1.add(g, weight=1)
         self.var_gold = tk.StringVar()
         self.var_fame = tk.StringVar()
         self.var_store = tk.StringVar()
         self.var_steps = tk.StringVar()
-        rows = [('金钱(元宝)', self.var_gold, 'LockNumber 6 组一起重算'),
-                ('声望', self.var_fame, ''),
-                ('仓库金额', self.var_store, ''),
-                ('步数', self.var_steps, '')]
-        for i, (label, var, hint) in enumerate(rows):
-            ttk.Label(g, text=label, width=10).grid(row=i, column=0, sticky='w', pady=3)
-            ttk.Entry(g, textvariable=var, width=20).grid(row=i, column=1, sticky='w')
-            if hint:
-                ttk.Label(g, text=hint, foreground='#888').grid(row=i, column=2,
-                                                                sticky='w', padx=6)
+        rows = [('金钱(元宝)', self.var_gold), ('声望', self.var_fame),
+                ('仓库金额', self.var_store), ('步数', self.var_steps)]
+        for i, (label, var) in enumerate(rows):
+            ttk.Label(g, text=label + '：', anchor='w').grid(
+                row=0, column=i * 2, sticky='w', padx=(4, 2), pady=3)
+            ttk.Entry(g, textvariable=var, width=10).grid(
+                row=0, column=i * 2 + 1, sticky='we', padx=(0, 8))
+        # 4 个输入框列等权重 → 窗口拉宽时一起变宽（画迹2 同款）
+        for c in (1, 3, 5, 7):
+            g.columnconfigure(c, weight=1)
+        ttk.Label(g, foreground='#888', justify='left', wraplength=460,
+                  text='金钱走 LockNumber 6 组一起重算，不会被判定作弊'
+                  ).grid(row=1, column=0, columnspan=8, sticky='w', pady=(6, 0))
         ttk.Button(g, text='应用', command=self.apply_quick).grid(
-            row=len(rows), column=1, sticky='w', pady=8)
+            row=2, column=0, sticky='w', pady=(8, 0))
+
+        # ===== 右：存档概况（原先是 fill='x' 的死高度；现在占满剩余空间）=====
+        h1 = ttk.LabelFrame(body1, text='存档概况', padding=6)
+        body1.add(h1, weight=1)
+        self.lb_info = tk.Text(h1, height=10, wrap='none', font=('Consolas', 10))
+        vs1 = ttk.Scrollbar(h1, orient='vertical', command=self.lb_info.yview)
+        hs1 = ttk.Scrollbar(h1, orient='horizontal', command=self.lb_info.xview)
+        self.lb_info.configure(yscrollcommand=vs1.set, xscrollcommand=hs1.set)
+        vs1.pack(side='right', fill='y')
+        hs1.pack(side='bottom', fill='x')
+        self.lb_info.pack(fill='both', expand=True)
 
         # ---- 1.5 存档管理（备份 / 恢复）----
         self._tab_saves()
@@ -421,7 +434,7 @@ class App(object):
         # ---- 名字（人物 / 召唤兽通用）----
         #     游戏显示名 = @new_name 存在 ? @new_name : @name
         #     （0040 Game_Battler#custom_name；玩家在游戏里改名就是写 @new_name）
-        nf = ttk.LabelFrame(f3, text='名字（游戏显示的是 @new_name，没有才用 @name）',
+        nf = ttk.LabelFrame(f3, text='名字（只改显示名 @new_name；基础名 @name 不动）',
                             padding=6)
         nf.pack(fill='x', pady=4)
         self.lb_name_now = ttk.Label(nf, text='（未选中）', foreground='#444',
@@ -432,10 +445,8 @@ class App(object):
             row=0, column=1, padx=4)
         ttk.Button(nf, text='设为显示名(@new_name)',
                    command=self.apply_custom_name).grid(row=0, column=2, padx=2)
-        ttk.Button(nf, text='改基础名(@name)',
-                   command=self.apply_base_name).grid(row=0, column=3, padx=2)
         ttk.Button(nf, text='清除显示名(恢复原名)',
-                   command=self.clear_custom_name).grid(row=0, column=4, padx=2)
+                   command=self.clear_custom_name).grid(row=0, column=3, padx=2)
         # 召唤兽专用：$pet 名字表校验（名字不在表里游戏会崩）—— 见 doctree 注释
         self.lb_name_check = ttk.Label(nf, text='', foreground='#444')
         self.lb_name_check.grid(row=1, column=0, columnspan=3, sticky='w', pady=(4, 0))
@@ -474,24 +485,34 @@ class App(object):
                   ('@add_liliang', '附加力量', 6), ('@add_naili', '附加耐力', 6),
                   ('@add_minjie', '附加敏捷', 6), ('@maxhp_plus', 'HP加成', 6),
                   ('@maxsp_plus', 'SP加成', 6)]
-        for i, (ivar, label, w) in enumerate(fields):
-            r, c = i % 10, (i // 10) * 3
-            ttk.Label(e, text=label, width=9).grid(row=r, column=c, sticky='w')
+        # 每行 4 组（画迹2 同款）：19 个字段从 10 行压到 5 行，整页矮一半多；
+        # 标签自适应宽 + 全角冒号（固定 width=9 会把空白垫在输入框左边，画迹2 踩过）
+        for i, (ivar, label, _w) in enumerate(fields):
+            r, c = i // 4, i % 4
+            ttk.Label(e, text=label + '：').grid(
+                row=r, column=c * 2, sticky='w', pady=2,
+                padx=(0 if c == 0 else 10, 2))
             var = tk.StringVar()
-            ttk.Entry(e, textvariable=var, width=w).grid(row=r, column=c + 1, sticky='w')
+            ttk.Entry(e, textvariable=var, width=9).grid(
+                row=r, column=c * 2 + 1, pady=2, sticky='we')
             self.actor_vars[ivar] = var
+        # 4 组输入框列等权重，窗口拉宽时一起变宽
+        for c in (1, 3, 5, 7):
+            e.columnconfigure(c, weight=1)
+        # 预设按钮并成一行放网格下面（原先是竖条挂在网格右侧 rowspan=10）
         btns = ttk.Frame(e)
-        btns.grid(row=0, column=6, rowspan=10, sticky='n', padx=8)
+        btns.grid(row=(len(fields) + 3) // 4, column=0, columnspan=8,
+                  sticky='w', pady=(8, 0))
         ttk.Button(btns, text='应用人物修改',
-                   command=self.apply_actor).pack(fill='x', pady=2)
+                   command=self.apply_actor).pack(side='left')
         ttk.Button(btns, text='一键满级(175/180)',
-                   command=lambda: self.actor_preset('max')).pack(fill='x', pady=2)
+                   command=lambda: self.actor_preset('max')).pack(side='left', padx=6)
         ttk.Button(btns, text='HP/SP 填满',
-                   command=lambda: self.actor_preset('heal')).pack(fill='x', pady=2)
+                   command=lambda: self.actor_preset('heal')).pack(side='left')
         ttk.Button(btns, text='五维+10',
-                   command=lambda: self.actor_preset('attr')).pack(fill='x', pady=2)
+                   command=lambda: self.actor_preset('attr')).pack(side='left', padx=6)
         ttk.Button(btns, text='活力/体力150',
-                   command=lambda: self.actor_preset('vital')).pack(fill='x', pady=2)
+                   command=lambda: self.actor_preset('vital')).pack(side='left')
         self.txt_actor = tk.Text(self.fr_person, height=4, width=60,
                                  wrap='word')
         vsa = ttk.Scrollbar(self.fr_person, orient='vertical',
@@ -677,16 +698,52 @@ class App(object):
                             command=self.on_container_change).pack(side='left', padx=2)
         ttk.Label(top, foreground='#666',
                   text='   游戏里这三个都是 20 格（@pack / @wallet / @talisman），'
-                       '每格 = [物品实例, 数量]'
+                       '每格 = [实例, 数量]'
                   ).pack(side='left')
-        cols4 = ('slot', 'name', 'std', 'iid', 'count', 'quality', 'reg', 'desc')
-        heads4 = ('格', '物品名（实例）', '模板id', '实例id', '数量', '品质', '登记', '说明')
-        self.tv_pack = ttk.Treeview(f4, columns=cols4, show='headings', height=13)
-        for c, h, w in zip(cols4, heads4, (36, 170, 60, 60, 52, 50, 76, 350)):
+        top2 = ttk.Frame(f4)
+        top2.pack(fill='x', pady=(4, 0))
+        ttk.Label(top2, text='类别（按实例的 Ruby 类）：').pack(side='left')
+        self.var_tpl_kind = tk.StringVar(value='item')
+        for _k, _c, _t, _l in MOD.ITEM_KINDS:
+            ttk.Radiobutton(top2, text=_l, value=_k, variable=self.var_tpl_kind,
+                            command=self.on_tpl_kind_change).pack(side='left', padx=2)
+        ttk.Label(top2, foreground='#666',
+                  text='   兜兜/灵石/糖果 = 装备，与上面的容器无关'
+                  ).pack(side='left')
+        self._tpls = []
+        self._tpl_kind = 'item'
+        self._tpl_cache = {}
+        self._tpl_pick = {}
+        self._tpl_lb = None        # 下拉内部 listbox 的 Tcl 路径
+        self._tpl_cmds = {}        # 注册过的 Tcl 回调（只注册一次）
+        self._tip_win = None
+        self._tip_lab = None
+        self._tip_row = None
+        self._tip_item = None
+        cols4 = ('slot', 'kind', 'name', 'std', 'iid', 'count', 'quality',
+                 'reg', 'desc')
+        heads4 = ('格', '类', '物品名（实例）', '模板id', '实例id', '数量',
+                  '品质', '登记', '说明')
+        pkwrap = ttk.Frame(f4)
+        pkwrap.pack(fill='both', expand=True, pady=4)
+        self.tv_pack = ttk.Treeview(pkwrap, columns=cols4, show='headings',
+                                    height=12)
+        for c, h in zip(cols4, heads4):
             self.tv_pack.heading(c, text=h)
-            self.tv_pack.column(c, width=w, anchor='w')
-        self.tv_pack.pack(fill='both', expand=True, pady=4)
+            self.tv_pack.column(c, width=60, anchor='w',
+                                stretch=(c == 'desc'))
+        hs4 = ttk.Scrollbar(pkwrap, orient='horizontal',
+                            command=self.tv_pack.xview)
+        vs4 = ttk.Scrollbar(pkwrap, orient='vertical',
+                            command=self.tv_pack.yview)
+        self.tv_pack.configure(xscrollcommand=hs4.set, yscrollcommand=vs4.set)
+        hs4.pack(side='bottom', fill='x')
+        self.tv_pack.pack(side='left', fill='both', expand=True)
+        vs4.pack(side='left', fill='y')
         self.tv_pack.bind('<<TreeviewSelect>>', lambda e: self.load_pack_edit())
+        self.tv_pack.bind('<Configure>', self.fit_pack_cols)
+        self.tv_pack.bind('<Motion>', self.on_pack_hover)
+        self.tv_pack.bind('<Leave>', lambda e: self.hide_tip())
 
         g4 = ttk.LabelFrame(
             f4, text='修改当前容器（空格子 = 新增；已有物品的格子 = 覆盖重建）',
@@ -715,49 +772,31 @@ class App(object):
         self.var_pack_std = tk.StringVar()
         self.cb_tpl = ttk.Combobox(g4, textvariable=self.var_pack_std, width=52)
         self.cb_tpl.grid(row=2, column=1, columnspan=4, sticky='w', pady=(6, 0))
+        self.cb_tpl.bind('<<ComboboxSelected>>', self.on_tpl_pick)
+        # 下拉弹出前把内部 listbox 的悬停绑上（popdown 只有弹出时才存在）
+        self.cb_tpl.configure(postcommand=self.on_tpl_post)
         ttk.Button(g4, text='写入 · 修改该格', command=self.pack_apply).grid(
             row=0, column=6, rowspan=3, padx=(14, 4), sticky='ns')
         ttk.Button(g4, text='删除该格', command=self.pack_delete).grid(
             row=0, column=7, rowspan=3, sticky='ns')
         ttk.Label(g4, foreground='#888', justify='left',
-                  text='物品 id 可直接填数字（对应 data_items），或先在搜索框里筛（如"祈福"或 87）再从下拉选；\n'
-                       '写入时会把实例登记进 $data_items（游戏用它判断能不能使用），并自动分配实例id；\n'
-                       '数量小于 1 按 1 算，品质小于 1 按 100 算；每次操作后表格与"概览"立即刷新。\n'
-                       '“登记”列显示 ✓ 表示游戏认得这件物品；若显示异常，点【一键修复异常格】。'
+                  text='① 搜索是跨三类的：搜到别的类别会自动切过去，不必先手选「类别」；\n'
+                       '   「类别」= 按实例的 Ruby 类决定查哪张表，和上面的容器'
+                       '（道具 @pack / 行囊 @wallet / 备用 @talisman）是两回事 ——\n'
+                       '   装备/防具平时也装在 @pack 里，所以会出现在「道具」页；\n'
+                       '② 写入时按类别登记进 $data_items / $data_weapons / $data_armors'
+                       '（游戏靠它判断认不认），并自动分配实例 id；\n'
+                       '③ 装备/防具还会把新实例 id 并进职业的可装备表（照游戏 random_weapon）；\n'
+                       '   “登记”列 ✓ = 游戏认得；数量<1 按 1 算，品质<1 按 100 算。'
                   ).grid(row=3, column=0, columnspan=8, sticky='w', pady=(6, 0))
         ttk.Button(g4, text='一键修复异常格', command=self.pack_fix_bad).grid(
             row=4, column=6, columnspan=2, sticky='w', pady=(4, 0))
 
-        # ---- 5 开关 / 变量 ----
-        f5 = ttk.Frame(self.nb, padding=8)
-        self.nb.add(f5, text='开关 / 变量')
-        lf = ttk.Frame(f5)
-        lf.pack(side='left', fill='both', expand=True)
-        ttk.Label(lf, text='$game_switches.@data（双击切换）').pack(anchor='w')
-        self.tv_sw = ttk.Treeview(lf, columns=('i', 'v'), show='headings', height=20)
-        self.tv_sw.heading('i', text='编号')
-        self.tv_sw.heading('v', text='值')
-        self.tv_sw.column('i', width=80)
-        self.tv_sw.column('v', width=90)
-        self.tv_sw.pack(fill='both', expand=True)
-        self.tv_sw.bind('<Double-1>', lambda e: self.sw_toggle())
-
-        rf = ttk.Frame(f5)
-        rf.pack(side='left', fill='both', expand=True, padx=(8, 0))
-        ttk.Label(rf, text='$game_variables.@data（双击修改）').pack(anchor='w')
-        self.tv_va = ttk.Treeview(rf, columns=('i', 'v'), show='headings', height=20)
-        self.tv_va.heading('i', text='编号')
-        self.tv_va.heading('v', text='数值')
-        self.tv_va.column('i', width=80)
-        self.tv_va.column('v', width=280)
-        self.tv_va.pack(fill='both', expand=True)
-        self.tv_va.bind('<Double-1>', lambda e: self.va_edit())
-
-        # ---- 6 机器码 ----
+        # ---- 5 机器码 ----
         f6 = ttk.Frame(self.nb, padding=10)
         self.nb.add(f6, text='机器码')
         self.txt_id = tk.Text(f6, height=8, wrap='word')
-        self.txt_id.pack(fill='x')
+        self.txt_id.pack(fill='both', expand=True)
         self.txt_id.configure(font=('Consolas', 10))
         g6 = ttk.LabelFrame(f6, text='修改存档机器码', padding=10)
         g6.pack(fill='x', pady=8)
@@ -771,7 +810,7 @@ class App(object):
                   text='换电脑读档报"存档的主人不是你"时，把这里改成新机器的机器码。'
                   ).grid(row=1, column=0, columnspan=4, sticky='w', pady=(6, 0))
 
-        # ---- 7 说明 ----
+        # ---- 6 说明 ----
         f7 = ttk.Frame(self.nb, padding=8)
         self.nb.add(f7, text='说明 / 机制')
         t7 = tk.Text(f7, wrap='word')
@@ -779,7 +818,7 @@ class App(object):
         t7.insert('1.0', HELP_TEXT)
         t7.configure(state='disabled', font=('Microsoft YaHei UI', 10))
 
-        # ---- 8 更新日志 ----
+        # ---- 7 更新日志 ----
         f8 = ttk.Frame(self.nb, padding=8)
         self.nb.add(f8, text='更新日志')
         t8 = tk.Text(f8, wrap='word')
@@ -972,7 +1011,6 @@ class App(object):
         self.fill_actors()
         self.fill_pack()
         self.refresh_templates()
-        self.fill_switches()
         self.fill_id()
         self.saves_refresh()
 
@@ -1523,40 +1561,6 @@ class App(object):
         except Exception as e:
             self.err(e)
 
-    def apply_base_name(self):
-        aid = self.current_actor_id()
-        if aid is None or not self.doc:
-            self.err('请先在上面选中一个人物或召唤兽')
-            return
-        txt = self.var_newname.get().strip()
-        if not txt:
-            self.err('请先在输入框里写上新的名字')
-            return
-        # 召唤兽的 @name 会被游戏拿去索引 $pet 表（0163 第 147 行），
-        # 表里没有的名字会让召唤兽界面直接报 NoMethodError，所以先拦一道
-        if aid > 20 and self.doc.pet_name_table() \
-                and self.doc.pet_name_ok(txt) is False:
-            from tkinter import messagebox
-            sug, _why = self.doc.suggest_pet_name(aid)
-            if not messagebox.askyesno(
-                    '这个名字会让游戏报错',
-                    '「%s」不在游戏的 $pet 名字表里。\n\n'
-                    '游戏脚本会执行 $pet["#{名字}"][7]，取不到就会抛\n'
-                    'NoMethodError: undefined method \'[]\' for nil:NilClass\n'
-                    '（召唤兽界面直接打不开）。\n\n'
-                    '%s\n\n'
-                    '如果你只是想给它换个好听的名字，请改用【设为显示名(@new_name)】，'
-                    '那个不影响 $pet 查表。\n\n还要强行改成「%s」吗？'
-                    % (txt, ('建议改成模板本名：「%s」' % sug) if sug else '',
-                       txt), parent=self.root):
-                return
-        try:
-            self.doc.set_actor_name(aid, txt)
-            self._after_rename(aid, '%s 的 @name 已改成「%s」'
-                               % (self.actor_label(aid), txt))
-        except Exception as e:
-            self.err(e)
-
     def clear_custom_name(self):
         aid = self.current_actor_id()
         if aid is None or not self.doc:
@@ -2017,12 +2021,203 @@ class App(object):
             return
         key = self.cur_container()
         for r in self.doc.container_slots(key):
-            reg = '' if r['item'] is None else ('✔' if r['registered'] else '✘')
+            empty = r['item'] is None
+            reg = '' if empty else ('✔' if r['registered'] else '✘')
             node = self.tv_pack.insert('', 'end', values=(
-                r['slot'], r['name'], '' if r['standard'] is None else r['standard'],
-                '' if r['iid'] is None else r['iid'], r['count'],
-                '' if r['quality'] is None else r['quality'], reg, r['desc']))
+                r['slot'], '' if empty else r['kind_label'], r['name'],
+                '' if r['standard'] is None else r['standard'],
+                '' if r['iid'] is None else r['iid'],
+                '' if empty else r['count'],
+                '' if empty or r['quality'] is None else r['quality'],
+                reg, r['desc']))
             self.pack_rows[node] = r['slot']
+
+    # ---- 物品栏：列宽自适应 + 悬停说明（列里放不全时用）----
+    PACK_COL_W = {'slot': 3, 'kind': 4, 'name': 15, 'std': 6, 'iid': 6,
+                  'count': 5, 'quality': 5, 'reg': 4, 'desc': 48}
+    PACK_COL_MIN = {'slot': 30, 'kind': 34, 'name': 120, 'std': 52,
+                    'iid': 52, 'count': 44, 'quality': 44, 'reg': 46,
+                    'desc': 180}
+
+    def fit_pack_cols(self, _event=None, width=None):
+        """按窗口宽度把 9 列按权重铺满；余量全给「说明」，窄了就给横向滚动条。"""
+        tv = self.tv_pack
+        avail = width
+        if not avail:
+            try:
+                avail = tv.winfo_width()
+            except Exception:
+                return
+            if avail < 60:                      # 窗口还没布局出来
+                avail = tv.winfo_reqwidth()
+        if not avail or avail < 60:
+            return
+        cols = list(tv['columns'])
+        tw = sum(self.PACK_COL_W.get(c, 6) for c in cols)
+        w = {c: max(self.PACK_COL_MIN.get(c, 40),
+                    int(avail * self.PACK_COL_W.get(c, 6) / tw)) for c in cols}
+        extra = avail - sum(w.values())
+        if extra > 0:
+            w['desc'] += extra
+        for c in cols:
+            tv.column(c, width=w[c])
+        return sum(w.values())
+
+    def _ensure_tip(self):
+        if self._tip_win is None:
+            import tkinter as tk          # 本模块的 tkinter 是在构建函数里局部导入的
+            t = tk.Toplevel(self.root)
+            t.overrideredirect(True)
+            try:
+                t.attributes('-topmost', True)   # 下拉是 topmost，提示得压得住它
+            except Exception:
+                pass
+            t.withdraw()
+            lab = tk.Label(t, justify='left', wraplength=380,
+                           background='#fffbe6', foreground='#111111',
+                           relief='solid', borderwidth=1, padx=6, pady=4,
+                           font=('Microsoft YaHei UI', 9))
+            lab.pack()
+            self._tip_win = t
+            self._tip_lab = lab
+        return self._tip_win
+
+    def show_tip(self, text):
+        if not text:
+            self.hide_tip()
+            return
+        t = self._ensure_tip()
+        self._tip_lab.configure(text=text)
+        t.update_idletasks()
+        px, py = self.root.winfo_pointerx(), self.root.winfo_pointery()
+        x, y = px + 18, py + 16
+        tw, th = t.winfo_reqwidth(), t.winfo_reqheight()
+        sw, sh = t.winfo_screenwidth(), t.winfo_screenheight()
+        if x + tw + 8 > sw:                    # 贴右边缘就翻到指针左边
+            x = px - tw - 12
+        if y + th + 8 > sh:                    # 贴下边缘就翻到指针上边
+            y = py - th - 12
+        t.geometry('+%d+%d' % (max(0, x), max(0, y)))
+        t.deiconify()
+
+    def hide_tip(self, _event=None):
+        self._tip_row = None
+        self._tip_item = None
+        if self._tip_win is not None:
+            self._tip_win.withdraw()
+
+    def on_pack_hover(self, event):
+        """鼠标停在一行上：把那格的完整「说明」弹出来（列里放不全时用）。"""
+        row = self.tv_pack.identify_row(event.y)
+        if not row:
+            self.hide_tip()
+            return
+        if row == self._tip_row:
+            return
+        self._tip_row = row
+        vals = list(self.tv_pack.item(row, 'values'))
+        desc = str(vals[8]) if len(vals) > 8 else ''
+        name = str(vals[2]) if len(vals) > 2 else ''
+        std = str(vals[3]) if len(vals) > 3 else ''
+        if desc and len(desc) > 18:
+            self.show_tip('%s\n\n%s' % (name, desc))
+        elif std.isdigit():
+            kind = str(vals[1]) if len(vals) > 1 else ''
+            kk = [k for k, _c, _t, lb in MOD.ITEM_KINDS if lb == kind]
+            self.show_tip(self.doc.template_tip(kk[0] if kk else 'item',
+                                                int(std)))
+        else:
+            self.hide_tip()
+
+    def on_tpl_post(self):
+        """下拉即将弹出（ttk 的 -postcommand）：收起旧提示并绑好悬停。"""
+        self.hide_tip()
+        self.bind_tpl_popdown()
+
+    def _tpl_tcl_cmd(self, key, func):
+        """把一个 Python 回调注册成 Tcl 命令（缓存住，别每轮注册一遍）。"""
+        if key not in self._tpl_cmds:
+            self._tpl_cmds[key] = self.root.register(func)
+        return self._tpl_cmds[key]
+
+    def _popdown_listbox(self):
+        """拿到下拉内部 listbox 的 Tcl 路径（拿不到返回 None）。
+
+        ⚠ 别用 nametowidget：popdown 是 ttk 用 Tcl 直接建的原生 toplevel，
+          tkinter 的 children 字典里没有它 ⇒ nametowidget 直接 KeyError。
+          实测结构：<combobox>.popdown → .f → .f.l(Listbox) / .f.sb(TScrollbar)。
+        """
+        try:
+            pd = self.root.tk.call('ttk::combobox::PopdownWindow',
+                                   str(self.cb_tpl))
+            kids = self.root.tk.call('winfo', 'children', '%s.f' % pd)
+        except Exception:
+            return None
+        if not isinstance(kids, (list, tuple)):
+            kids = [kids] if kids else []
+        for ch in kids:
+            ch = str(ch)
+            try:
+                if self.root.tk.call('winfo', 'class', ch) == 'Listbox':
+                    return ch
+            except Exception:
+                continue
+        return None
+
+    def bind_tpl_popdown(self):
+        """给下拉内部的 listbox 绑「鼠标移到某项就弹说明」。
+
+        ⚠ 时机：ttk 的 Post 是「先跑 -postcommand，再建/显示 popdown」，所以
+          只能挂在 -postcommand 上（我们这次调用会把 popdown 一并建出来）。
+        ⚠ 绑定走 Tcl 层且不加 '+'：ttk 自己的 <ButtonRelease-1>/<Escape> 挂在
+          ComboboxListbox / Listbox 这些 bindtag 上，不在这控件的 tag 上，
+          覆盖不到它；不加 '+' 则重复绑定只覆盖、不堆叠。
+        返回绑好的 listbox 路径；拿不到就返回 None，不影响正常使用。
+        """
+        lb = self._popdown_listbox()
+        if not lb:
+            return None
+        try:
+            self.root.tk.call('bind', lb, '<Motion>', '%s %%y' %
+                              self._tpl_tcl_cmd('motion',
+                                                self._tpl_lb_motion))
+            hide = self._tpl_tcl_cmd('hide', self.hide_tip)
+            for ev in ('<Leave>', '<ButtonRelease-1>', '<Escape>',
+                       '<FocusOut>'):
+                self.root.tk.call('bind', lb, ev, hide)
+            pd = self.root.tk.call('ttk::combobox::PopdownWindow',
+                                   str(self.cb_tpl))
+            self.root.tk.call('bind', pd, '<Unmap>', hide)   # 收起下拉即收提示
+        except Exception:
+            return None
+        self._tpl_lb = lb
+        return lb
+
+    def _tpl_lb_motion(self, y):
+        """下拉 listbox 上鼠标移动：把该项的说明弹出来（Tcl <Motion> 回调）。"""
+        lb = self._tpl_lb
+        if not lb:
+            return
+        try:
+            idx = int(self.root.tk.call(lb, 'nearest', int(float(y))))
+            if idx < 0 or idx >= int(self.root.tk.call(lb, 'size')):
+                self.hide_tip()
+                return
+            txt = str(self.root.tk.call(lb, 'get', idx))
+        except Exception:
+            return
+        if txt == self._tip_item:
+            return
+        self._tip_item = txt
+        k = self._tpl_pick.get(txt)
+        if not k or not self.doc:
+            self.hide_tip()
+            return
+        try:
+            i = int(txt.split('|', 1)[0].strip())
+        except ValueError:
+            return
+        self.show_tip(self.doc.template_tip(k, i))
 
     def current_slot(self):
         sel = self.tv_pack.selection()
@@ -2042,6 +2237,10 @@ class App(object):
             return
         self.var_pack_count.set(str(r['count'] or 1))
         self.var_pack_quality.set(str(r['quality'] if r['quality'] else 100))
+        # 选中装备/防具格时，把"类别"跟着切过去 —— 否则下拉框里根本列不到它
+        if r['kind'] != self.cur_tpl_kind():
+            self.var_tpl_kind.set(r['kind'])
+            self.refresh_templates()
         if isinstance(r['standard'], int):
             self.var_pack_std.set('%d | %s' % (r['standard'], r['template_name']))
 
@@ -2056,6 +2255,7 @@ class App(object):
 
     def pack_refresh(self, slot=None):
         """物品栏改动后立即刷新（表格 + 概览 + 回填输入框）。"""
+        self._tpl_cache = {}
         self.fill_pack()
         self.fill_info()
         if slot is None:
@@ -2087,13 +2287,17 @@ class App(object):
         r0 = self.doc.pack_slot(slot, key)
         had = bool(r0 and r0['item'] is not None)
         try:
-            info = self.doc.pack_write(slot, sid, cnt, qty, key)
+            kind = self.cur_tpl_kind()
+            info = self.doc.pack_write(slot, sid, cnt, qty, key, kind=kind)
             self.mark_dirty()
             self.pack_refresh(slot)
-            self.set_status('%s%s第 %d 格：%s（物品 id %d）× %d，品质 %d，实例 id %d（已登记）'
-                            % ('改写' if had else '新增', self.cur_container(),
-                               info['slot'], info['template_name'], info['standard'],
-                               info['count'], info['quality'], info['iid']))
+            self.set_status(
+                '%s%s第 %d 格：%s（%s id %d）× %d%s，实例 id %d（已登记进 $%s）'
+                % ('改写' if had else '新增', self.cur_container(),
+                   info['slot'], info['template_name'], info['kind_label'],
+                   info['standard'], info['count'],
+                   '' if info['quality'] is None else '，品质 %d' % info['quality'],
+                   info['iid'], MOD.KIND_TABLE[info['kind']]))
         except Exception as e:
             self.err(e)
 
@@ -2119,6 +2323,18 @@ class App(object):
         except Exception as e:
             self.err(e)
 
+    def cur_tpl_kind(self):
+        try:
+            k = self.var_tpl_kind.get()
+        except Exception:
+            k = 'item'
+        return k if k in MOD.KIND_TABLE else 'item'
+
+    def on_tpl_kind_change(self):
+        """切换"物品 / 装备 / 防具"：重新取那张模板表并清空搜索。"""
+        self.var_tpl_search.set('')
+        self.refresh_templates()
+
     def clear_tpl_search(self):
         self.var_tpl_search.set('')
         self.filter_templates()
@@ -2126,29 +2342,82 @@ class App(object):
     def refresh_templates(self):
         if not self.doc:
             return
-        try:
-            self._tpls = self.doc.item_templates()
-        except Exception:
-            self._tpls = []
+        kind = self.cur_tpl_kind()
+        self._tpl_cache = {}
+        self._tpls = self._tpls_of(kind)
+        self._tpl_kind = kind
         self.filter_templates()
 
+    def _tpls_of(self, kind):
+        """某一类的模板列表（带缓存 —— 跨类搜索时每次按键都要用）。"""
+        if not hasattr(self, '_tpl_cache'):
+            self._tpl_cache = {}
+        if kind not in self._tpl_cache:
+            try:
+                self._tpl_cache[kind] = self.doc.templates(kind)
+            except Exception:
+                self._tpl_cache[kind] = []
+        return self._tpl_cache[kind]
+
     def filter_templates(self):
-        """按搜索框过滤物品下拉列表（名字关键字或直接填编号）。"""
+        """按搜索框过滤模板下拉。
+
+        ★ 有搜索词时**跨三类**一起搜：旧版只搜「当前类别」，于是在「物品」下
+        搜不到泡泡兜兜 / 灵石 / 糖果这类东西 —— 它们其实在 $data_weapons 里。
+        命中行会标出所属类别，选中后由 on_tpl_pick 自动把类别切过去。
+        """
         kw = ''
         try:
             kw = self.var_tpl_search.get().strip().lower()
         except Exception:
             pass
         out = []
-        for i, n in getattr(self, '_tpls', []):
-            if not kw or kw in n.lower() or kw == str(i):
-                out.append('%d | %s' % (i, n))
-        self.cb_tpl['values'] = out[:500]
+        self._tpl_pick = {}
+        per = {}
+        if not kw:
+            k = getattr(self, '_tpl_kind', 'item')
+            hits = [(k, i, n) for i, n in getattr(self, '_tpls', [])]
+        else:
+            hits = []
+            for k, _c, _t, _l in MOD.ITEM_KINDS:
+                for i, n in self._tpls_of(k):
+                    if kw in n.lower() or kw == str(i):
+                        hits.append((k, i, n))
+                        per[k] = per.get(k, 0) + 1
+        for k, i, n in hits[:500]:
+            s = '%d | %s' % (i, n)
+            if kw:
+                s += '（%s）' % MOD.KIND_LABEL.get(k, '')
+            out.append(s)
+            self._tpl_pick[s] = k
+        self.cb_tpl['values'] = out
+        self.bind_tpl_popdown()
         try:
-            self.lb_tpl_info.configure(text='命中 %d / 共 %d 个物品'
-                                       % (len(out), len(getattr(self, '_tpls', []))))
+            if kw:
+                detail = ' / '.join(
+                    '%s %d' % (MOD.KIND_LABEL.get(k, ''), per.get(k, 0))
+                    for k, _c, _t, _l in MOD.ITEM_KINDS)
+                txt = '跨三类命中 %d 个（%s）%s' % (
+                    len(hits), detail,
+                    '，只显示前 500 条' if len(hits) > 500 else '')
+            else:
+                k = getattr(self, '_tpl_kind', 'item')
+                txt = ('[%s] 共 %d 个 —— 直接搜名字可跨三类一起找'
+                       % (MOD.KIND_LABEL.get(k, '物品'), len(hits)))
+            self.lb_tpl_info.configure(text=txt)
         except Exception:
             pass
+
+    def on_tpl_pick(self, _event=None):
+        """从下拉里选了模板：它属于别的类别就自动切过去（否则会按错表写入）。"""
+        self.hide_tip()
+        s = self.var_pack_std.get().strip()
+        k = getattr(self, '_tpl_pick', {}).get(s)
+        if k and k != self.cur_tpl_kind():
+            self.var_tpl_kind.set(k)
+            self.refresh_templates()
+            self.set_status('这一项属于「%s」，已自动把类别切过去'
+                            % MOD.KIND_LABEL.get(k, k))
 
     def pack_fix_bad(self):
         """检查三个容器里那些"游戏里用不了"的格子，确认后按模板重建（并重新登记）。"""
@@ -2181,49 +2450,6 @@ class App(object):
             self.set_status('已修复 %d 个异常格子：%s'
                             % (len(fixed),
                                '、'.join('%s#%d' % (k, s) for k, s in fixed)))
-        except Exception as e:
-            self.err(e)
-
-    # ================= 开关 / 变量 =================
-    def fill_switches(self):
-        self.tv_sw.delete(*self.tv_sw.get_children())
-        self.tv_va.delete(*self.tv_va.get_children())
-        if not self.doc:
-            return
-        for i, v in self.doc.switches():
-            self.tv_sw.insert('', 'end', values=(i, v))
-        for i, v, t in self.doc.variables():
-            self.tv_va.insert('', 'end', values=(i, '%s   [%s]' % (v, t)))
-
-    def sw_toggle(self):
-        sel = self.tv_sw.selection()
-        if not sel or not self.doc:
-            return
-        idx, val = self.tv_sw.item(sel[0], 'values')
-        try:
-            self.doc.set_switch(int(idx), not (str(val) == 'True'))
-            self.mark_dirty()
-            self.fill_switches()
-        except Exception as e:
-            self.err(e)
-
-    def va_edit(self):
-        from tkinter import simpledialog
-        sel = self.tv_va.selection()
-        if not sel or not self.doc:
-            return
-        idx = int(self.tv_va.item(sel[0], 'values')[0])
-        cur = self.doc.variables()[idx][1]
-        new = simpledialog.askinteger(
-            '修改变量', '变量 %d 的新值：' % idx,
-            initialvalue=int(cur) if isinstance(cur, (int, float)) else 0,
-            parent=self.root)
-        if new is None:
-            return
-        try:
-            self.doc.set_variable(idx, new)
-            self.mark_dirty()
-            self.fill_switches()
         except Exception as e:
             self.err(e)
 

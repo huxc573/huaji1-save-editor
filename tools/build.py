@@ -30,7 +30,7 @@ sys.path.insert(0, SRC)
 
 from paths import game_dir as _game_dir                   # noqa: E402
 
-APP_VERSION = '1.4.0'
+APP_VERSION = '1.5.0'
 REPO_NAME = 'huaji1-save-editor'
 # 本地产物固定叫「画迹1存档工具.exe」，不带版本号；版本号只出现在发行包名上。
 EXE_NAME = '画迹1存档工具'

@@ -83,6 +83,19 @@ def _run(root):
         app.nb.select(t)
         root.update()
         print('  [%d] %-14s OK' % (i, name))
+    # ---- v1.5.0：删掉的两个功能不许回来 ----
+    _tn = [app.nb.tab(t, 'text') for t in tabs]
+    print('页签名：%s' % _tn)
+    print('已去掉「开关 / 变量」页：%s'
+          % ('OK' if not any('开关' in n for n in _tn) else '失败 %s' % _tn))
+    _nb = [w.cget('text') for w in app.lb_name_now.master.winfo_children()
+           if isinstance(w, app.ttk.Button)]
+    print('名字栏按钮：%s' % _nb)
+    print('名字栏没有「改基础名」入口：%s'
+          % ('OK' if _nb and not any('基础名' in t for t in _nb) else '失败'))
+    print('也删掉了 apply_base_name / fill_switches：%s'
+          % ('OK' if not (hasattr(app, 'apply_base_name')
+                          or hasattr(app, 'fill_switches')) else '失败'))
     # 刷新一遍数据
     app.fill_all()
     root.update()
@@ -108,7 +121,7 @@ def _run(root):
     row = [app.tv_pack.item(i, 'values') for i in app.tv_pack.get_children()
            if str(app.tv_pack.item(i, 'values')[0]) == str(slot)]
     print('写入第 %d 格后表格显示：%s' % (slot, row[0] if row else '无'))
-    ok_tbl = bool(row) and str(row[0][4]) == '1' and str(row[0][5]) == '100'
+    ci = {c: n for n, c in enumerate(app.tv_pack['columns'])}; ok_tbl = bool(row) and str(row[0][ci['count']]) == '1' and str(row[0][ci['quality']]) == '100'
     print('表格立即刷新（数量 1 / 品质 100）：%s' % ('OK' if ok_tbl else '失败'))
     r = doc.pack_slot(slot)
     print('内存里的值：数量 %s 品质 %s 字段 %d 个（模板 25 + standard + quality）'
@@ -127,6 +140,130 @@ def _run(root):
     app.filter_templates()
     root.update()
     print('清空搜索：%s' % app.lb_tpl_info.cget('text'))
+
+    # ---- v1.5.0：搜索必须跨三类（旧版在「物品」下搜不到装备类模板）+ 选中自动切类别 ----
+    app.var_tpl_kind.set('item')
+    app.on_tpl_kind_change()
+    app.var_tpl_search.set('泡泡兜兜')
+    app.filter_templates()
+    root.update()
+    vals = list(app.cb_tpl['values'])
+    print('类别=物品 搜「泡泡兜兜」：%s' % vals)
+    ok_x = bool(vals) and any('（装备）' in v for v in vals)
+    print('跨类搜索命中装备模板（条目带类别后缀）：%s' % ('OK' if ok_x else '失败'))
+    if vals:
+        app.var_pack_std.set(vals[0])
+        app.on_tpl_pick()
+        root.update()
+    ok_sw = app.cur_tpl_kind() == 'weapon'
+    print('选中装备模板后自动把类别切到 weapon：%s' % ('OK' if ok_sw else '失败'))
+    ok_info = '跨三类命中' in app.lb_tpl_info.cget('text')
+    print('提示行写明「跨三类命中」：%s' % ('OK' if ok_info else '失败'))
+    app.var_tpl_search.set('')
+    app.on_tpl_kind_change()
+    root.update()
+    # 空格子不该显示"类 / 数量"
+    blanks = [app.tv_pack.item(i, 'values') for i in app.tv_pack.get_children()
+              if str(app.tv_pack.item(i, 'values')[2]) == '（空）']
+    ok_empty = bool(blanks) and all(str(v[1]) == '' and str(v[5]) == ''
+                                   for v in blanks)
+    print('空格子不显示类/数量（%d 格）：%s'
+          % (len(blanks), 'OK' if ok_empty else '失败'))
+
+    # ---- v1.5.0：滚动条 / 列宽自适应 / 悬停说明 ----
+    ok_sc = bool(app.tv_pack.cget('xscrollcommand')) and \
+        bool(app.tv_pack.cget('yscrollcommand'))
+    print('物品栏表格有横/纵滚动条：%s' % ('OK' if ok_sc else '失败'))
+    tot = app.fit_pack_cols(width=1100)
+    ok_fit = bool(tot) and tot >= 1100
+    print('列宽按窗口宽度自适应铺满（1100 -> %s）：%s'
+          % (tot, 'OK' if ok_fit else '失败'))
+    tip = doc.template_tip('weapon', 468)
+    ok_tip = '泡泡兜兜' in tip and '王母娘娘' in tip
+    print('模板提示 = 名字 + 类别 + 说明：%s' % ('OK' if ok_tip else '失败'))
+    print('  （第 468 号提示：%s）' % tip.replace('\n\n', ' / '))
+    try:
+        app.show_tip(tip)
+        app.hide_tip()
+        ok_pop = True
+    except Exception as e:
+        ok_pop = False
+        print('  悬停提示异常：%s' % e)
+    print('悬停提示可开可关：%s' % ('OK' if ok_pop else '失败'))
+    app.var_tpl_search.set('泡泡兜兜')
+    app.filter_templates()
+    root.update()
+    ok_map = any('泡泡兜兜' in s for s in app._tpl_pick)
+    print('下拉悬停的「项->类别」映射已建：%s' % ('OK' if ok_map else '失败'))
+
+    # ---- v1.5.0：下拉项悬停说明必须真能弹出来 ----
+    # ⚠ 踩过的坑：ttk 的 popdown 是 Tcl 直接建的原生 toplevel，tkinter 的
+    #   children 里根本没有它 ⇒ nametowidget('<cb>.popdown.f.l') 会 KeyError，
+    #   上一版就是这样「绑定静默失败、悬停没反应」。绑定必须走 Tcl 路径。
+    app.var_tpl_search.set('兜兜')
+    app.filter_templates()
+    root.update()
+    _cb = str(app.cb_tpl)
+    _pd = str(root.tk.call('ttk::combobox::PopdownWindow', _cb))
+    _lb = app.bind_tpl_popdown()
+    print('下拉内部 listbox 拿到了（不是 None）：%s'
+          % ('OK' if _lb else '失败 %r' % (_lb,)))
+    print('  路径 %r 类别 %s'
+          % (_lb, root.tk.call('winfo', 'class', _lb) if _lb else '-'))
+    print('悬停绑定（<Motion> 指到我们自己的命令）：%s'
+          % ('OK' if _lb and '_tpl_lb_motion' in str(
+              root.tk.call('bind', _lb, '<Motion>')) else '失败'))
+    print('收提示绑定（<Leave>/<Unmap>）：%s'
+          % ('OK' if _lb and root.tk.call('bind', _lb, '<Leave>')
+             and root.tk.call('bind', _pd, '<Unmap>') else '失败'))
+    print('ttk 自己的点选绑定没被覆盖：%s'
+          % ('OK' if 'ttk::combobox::LBSelected' in str(root.tk.call(
+              'bind', 'ComboboxListbox', '<ButtonRelease-1>')) else '失败'))
+    # ⚠ ttk 的 Post 是「先跑 -postcommand（我们在这绑）再 ConfigureListbox
+    #   （这时才把值填进 listbox）」，所以此刻 listbox 还是空的。
+    root.tk.call('ttk::combobox::ConfigureListbox', _cb)
+    root.update_idletasks()
+    _ys = []
+    _mapped = False
+    try:
+        # 摆到屏幕外再映射：控件有真实几何、事件真的能派发，但屏幕上看不见
+        root.tk.call('wm', 'geometry', _pd, '400x200+20000+20000')
+        root.tk.call('wm', 'deiconify', _pd)
+        root.update()
+        _mapped = True
+        for _i in range(int(root.tk.call(_lb, 'size'))):
+            _bb = root.tk.call(_lb, 'bbox', _i)
+            _ys.append(int(_bb[1]) + int(_bb[3]) // 2)
+        _hit, _tip0 = [], ''
+        for _y in _ys:
+            # Tk 的 <Motion> 要先有 <Enter> 才会派发到控件上
+            root.tk.call('event', 'generate', _lb, '<Enter>',
+                         '-x', '5', '-y', str(_y))
+            root.tk.call('event', 'generate', _lb, '<Motion>',
+                         '-x', '5', '-y', str(_y))
+            root.update()
+            _hit.append(app._tip_item)
+            if app._tip_lab is not None:
+                _tip0 = _tip0 or app._tip_lab.cget('text').replace('\n\n', ' / ')
+        print('下拉每一项：%s' % _hit)
+        print('  第一项提示：%s' % _tip0)
+        print('鼠标移到下拉某项就弹该条说明：%s'
+              % ('OK' if _hit and all(_hit) and
+                 len(set(_hit)) == len(_hit) else '失败'))
+        print('提示正文 = 名字 + 类别 + 游戏说明：%s'
+              % ('OK' if ('泡泡兜兜' in _tip0 and '装备 id 468' in _tip0
+                          and '王母娘娘' in _tip0) else '失败'))
+        root.tk.call('event', 'generate', _lb, '<Leave>')
+        root.update()
+        print('鼠标离开下拉即收提示：%s'
+              % ('OK' if app._tip_item is None else '失败'))
+    finally:
+        if _mapped:
+            root.tk.call('wm', 'withdraw', _pd)
+    app.hide_tip()
+    app.var_tpl_search.set('')
+    app.on_tpl_kind_change()
+    root.update()
     # ---- 角色 / 召唤兽 分离 + 技能 ----
     print('角色页提示：%s' % app.lb_actor_hint.cget('text'))
     app.var_actor_group.set('pet')

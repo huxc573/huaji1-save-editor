@@ -37,9 +37,22 @@ DB_FILES = {'data_skills': 'Skills.rxdata', 'data_items': 'Items.rxdata',
             'data_weapons': 'Weapons.rxdata', 'data_armors': 'Armors.rxdata',
             'data_actors': 'Actors.rxdata', 'data_classes': 'Classes.rxdata'}
 
+#: 物品容器里的一格有三种实例（看 Ruby 类名），模板表 / 登记表**各不相同**。
+#: 游戏脚本 0156 的 random_item / random_weapon / random_armor 就是这么分的：
+#:   物品 = $data_items；装备（含召唤兽的灵石/糖果/兜兜）= $data_weapons；
+#:   人物防具 = $data_armors —— 三者的 @id 是三个独立编号空间。
+#: ⚠ 1.4.0 以前只认 $data_items：装备/防具的模板名、登记判定、一键修复全走错表。
+ITEM_KINDS = (('item', 'RPG::Item', 'data_items', '物品'),
+              ('weapon', 'RPG::Weapon', 'data_weapons', '装备'),
+              ('armor', 'RPG::Armor', 'data_armors', '防具'))
+KIND_BY_CLS = {c: (k, t, l) for k, c, t, l in ITEM_KINDS}
+KIND_TABLE = {k: t for k, _c, t, _l in ITEM_KINDS}
+KIND_LABEL = {k: l for k, _c, _t, l in ITEM_KINDS}
+KIND_CLS = {k: c for k, c, _t, _l in ITEM_KINDS}
+
 # 项目元信息（界面、文档、打包都用它，只维护这一处）
 APP_NAME = '画迹1：落日情缘 存档工具'
-APP_VERSION = '1.4.0'
+APP_VERSION = '1.5.0'
 AUTHOR = 'huxc573'
 HOMEPAGE = 'https://github.com/huxc573/huaji1-save-editor'
 LICENSE_NAME = 'MIT License'
@@ -429,7 +442,43 @@ CHANGELOG = ("""【画迹1：落日情缘】存档工具 —— 更新日志
 版本规则：0.1 ~ 0.7 是开发期迭代，v1.0 首次公开发布，v1.1~v1.2 修 bug，v1.3 起加功能
 ================================================================
 
-""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.4.0 2026-09-30 （新功能：存档管理；修「技能名依赖游戏目录」；召唤兽页照画迹2 重排）
+""" % (AUTHOR, HOMEPAGE, LICENSE_NAME, ISSUES)) + """1.5.0 2026-10-03 08:36 （修：物品栏只认 $data_items，装备/防具模板选不到，一键修复会毁档）
+----------------------------------------------------------------
+[修] 物品格里其实有**三种实例**：物品(RPG::Item) / 装备(RPG::Weapon) /
+  防具(RPG::Armor)，模板与登记表分别是 $data_items / $data_weapons /
+  $data_armors（游戏脚本 0156 的 random_item / random_weapon / random_armor，
+  三个 @id 是三套独立编号）。1.4.0 以前整条物品栏只认 $data_items，于是：
+    · 泡泡兜兜($data_weapons[468])、灵石(23 件)、糖果(2 件) 这类**装备模板
+      一个都选不到** —— 下拉从 424 项变 953 项，一次补回 529 个模板；
+    · 装备 / 防具格的「登记」列**全判 ✘**；
+    · ⚠【一键修复异常格】按 $data_items 重建这些格 ⇒ 会把银腰带/珍珠链…
+      换成别的物品 —— **会毁档**。真档三容器共用 23 格，其中 15 格是装备/防具，
+      等于旧版点一下就会毁掉 15 格。
+[新] 物品栏加**「类别」单选**（物品 / 装备 / 防具）+ 一览表加「类」列（8→9 列）；
+  **搜索跨三类**：旧版只搜当前类别，在「物品」下搜「泡泡兜兜」是 0 命中；
+  现在命中行标出类别，从下拉选中会**自动切类别**（免得按错表写入）。
+  ⚠「道具/行囊/备用」三个页签是**容器**不是类别 —— 装备/防具平时也装在
+  @pack 里（游戏 gain_weapon 的 items 默认 @pack），所以会出现在「道具」页；
+  一览表补**纵横滚动条**（20 格以前看不到第 13 行之后）+ **列宽自适应**（余量给说明列）
+  + **悬停弹完整说明**（表格某行 / 下拉某一项都行，取模板 @description，
+  与游戏 tooltip 同源；提示贴边会自动翻向、并压在下拉之上）；
+  写入 / 登记 / 扫描 / 修复全部**按类别走表**；装备与防具实例写 @identify
+  （**没有** @quality），并照游戏把新实例并入职业的 @weapon_set / @armor_set。
+  真档现在扫描报 0 项异常（旧版报 15 项）。
+
+[删] 去掉两个功能：
+  · 「开关 / 变量」整页（$game_switches / $game_variables 改不改没影响，留着容易
+    误点）—— 页签 9 -> 8；数据还在存档里，解析页照样能看；
+  · 【改基础名(@name)】按钮：@name 是游戏索引 $pet 名字表的键，改成表外的名字
+    会让召唤兽界面直接 NoMethodError。名字栏只留【设为显示名(@new_name)】/
+    【清除显示名(恢复原名)】+【恢复模板本名】/【一键修复名字】—— @name 只给
+    「看」和「改回模板本名」。
+
+[排] 布局照画迹2 优化：概览页改左右分栏（快捷修改一行 4 组 | 存档概况占满剩余
+  空间、带滚动条）；人物编辑区 19 个字段从 10 行压成每行 4 组的 5 行网格，
+  预设按钮并成一行（整页请求高度 799 -> 772）；机器码页的机器码框撑满。
+
+""" + """1.4.0 2026-09-30 （新功能：存档管理；修「技能名依赖游戏目录」；召唤兽页照画迹2 重排）
 ----------------------------------------------------------------
 [修] 技能名 / 物品名这类表**存档里没有**，会回退去读游戏目录的 Data/*.rxdata，
   而旧版解析失败没有兜底 —— 文件缺失 / 游戏版本不同 / 那是加密过的 .rxdata 时
@@ -702,8 +751,11 @@ class Doc(object):
         # 因为容器后面的格子和 $data 其它字段可能是 '@N' 对象链接，
         # 直接替换一格的字节会让后面的链接指错对象
         self._pack_dirty = False
-        # $data_items 动过（新增登记项）-> 保存时也要整条重写 $data_items
+        # 登记表动过（新增实例）-> 保存时整条重写那几张表（见 _tpl_tables）
         self._tpl_dirty = False
+        self._tpl_tables = set()
+        # $data_classes 动过（新装备并进职业可装备表）-> 整条重写
+        self._classes_dirty = False
         # 角色/召唤兽的技能数组动过（长度变化）-> 整条重写 $game_actors / $game_party
         self._actors_dirty = False
 
@@ -937,6 +989,41 @@ class Doc(object):
                 s = s.split(',')[0]
             return s
         return '?'
+
+    def template_name(self, kind, i):
+        """按"实例类别"取模板名（kind = item / weapon / armor）。"""
+        if kind == 'weapon':
+            return self.weapon_name(i)
+        if kind == 'armor':
+            return self.armor_name(i)
+        return self.item_name(i)
+
+    def template_tip(self, kind, i):
+        """下拉悬停 / 表格提示用：模板名 + 类别 + @description。
+
+        「说明」= 模板的 @description（装备名被游戏重载成 "名字,HP,SP,等级"，
+        名字走 template_name 取前半段）。
+        """
+        nm = self.template_name(kind, i)
+        head = '%s ｜ %s id %d' % (nm, KIND_LABEL.get(kind, '物品'), i)
+        desc = ''
+        arr = self.db_array(kind)
+        if isinstance(i, int) and 0 <= i < len(arr):
+            nd = deref(arr[i])
+            if isinstance(nd, M.ObjNode):
+                desc = stext(nd.get('@description'), '')
+        if desc:
+            return '%s\n\n%s' % (head, desc)
+        return head
+
+    @staticmethod
+    def kind_of(node):
+        """从实例节点认出它属于哪张模板表（认不出来按物品算）。"""
+        cls = getattr(node, 'cls', None)
+        for k, c, _t, _l in ITEM_KINDS:
+            if cls == c:
+                return k
+        return 'item'
 
     def item_name(self, i):
         return self._name('data_items', 'Items.rxdata', i)
@@ -1590,7 +1677,9 @@ class Doc(object):
             return out
         for slot, cell in enumerate(arr.items):
             rec = {'slot': slot, 'cell': cell, 'item': None, 'standard': None,
-                   'name': '（空）', 'count': 0, 'iid': None, 'quality': None,
+                   'name': '（空）', 'name_raw': '', 'count': 0, 'iid': None,
+                   'quality': None, 'identify': None, 'kind': 'item',
+                   'kind_label': '物品',
                    'icon': '', 'desc': '', 'template_name': '', 'key': key,
                    'registered': False, 'reg_state': ''}
             if isinstance(cell, M.ArrayNode) and len(cell.items) >= 2:
@@ -1598,18 +1687,26 @@ class Doc(object):
                 rec['count'] = vof(cell.items[1], 0)
                 if isinstance(item, M.ObjNode):
                     rec['item'] = item
+                    kind = self.kind_of(item)
+                    rec['kind'] = kind
+                    rec['kind_label'] = KIND_LABEL.get(kind, '物品')
                     std = vof(item.get('@standard'))
                     rec['standard'] = std
                     rec['iid'] = vof(item.get('@id'))
-                    rec['name'] = stext(item.get('@name'), '?')
+                    nm = stext(item.get('@name'), '?')
+                    rec['name_raw'] = nm
+                    # 装备/防具的 @name 被游戏重载成 "名字,HP,SP,等级"（脚本 0045）
+                    rec['name'] = (nm.split(',')[0]
+                                   if kind in ('weapon', 'armor') else nm)
                     rec['icon'] = stext(item.get('@icon_name'))
                     rec['desc'] = stext(item.get('@description'))
                     rec['quality'] = vof(item.get('@quality'))
+                    rec['identify'] = vof(item.get('@identify'))
                     if isinstance(std, int):
-                        rec['template_name'] = self.item_name(std)
+                        rec['template_name'] = self.template_name(kind, std)
                     if rec['name'] in ('', '?') and rec['template_name']:
                         rec['name'] = rec['template_name']
-                    st, msg = self.registration_state(rec['iid'], std)
+                    st, msg = self.registration_state(rec['iid'], std, kind)
                     rec['registered'] = (st == 'ok')
                     rec['reg_state'] = msg
             out.append(rec)
@@ -1644,16 +1741,31 @@ class Doc(object):
                 rows.append(('物品', r['standard'], r['name'], r['count']))
         return rows
 
-    def item_templates(self):
-        """data_items 里的模板列表（id -> 名字），给"新增物品"下拉框用。"""
+    def templates(self, kind='item'):
+        """某一类实例的模板列表 (id, 名字)，给"新增 / 换"下拉框用。
+
+        名字一律先查内嵌 db_table（别人的存档快照可能比游戏版本旧），
+        id 范围取"登记表"与"内嵌表"的较大值 —— 免得漏掉新版追加的模板。
+        kind = item / weapon / armor，对应 $data_items / $data_weapons / $data_armors。
+        """
+        table = KIND_TABLE.get(kind) or 'data_items'
+        n = max(len(self.db_array(kind)), len(self._embed(table, 'NAMES')))
         out = []
-        items = self._db('data_items', 'Items.rxdata')
-        for i, it in enumerate(items):
-            if isinstance(it, M.ObjNode):
-                nm = it.get('@name')
-                if isinstance(nm, M.StrNode) and nm.str():
-                    out.append((i, nm.str()))
+        for i in range(1, n):
+            nm = self.template_name(kind, i)
+            if nm and nm != '?':
+                out.append((i, nm))
         return out
+
+    def item_templates(self):
+        """旧调用：物品模板列表。"""
+        return self.templates('item')
+
+    def weapon_templates(self):
+        return self.templates('weapon')
+
+    def armor_templates(self):
+        return self.templates('armor')
 
     def mounts(self):
         party = self.node('game_party')
@@ -1981,11 +2093,21 @@ class Doc(object):
         return sids
 
     # ---- 物品栏 ----
-    def item_db_array(self):
-        """$data_items 数组（存档里的那一份；游戏新增物品时会把实例 push 进去）。"""
-        return self._db('data_items', 'Items.rxdata')
+    def db_array(self, kind='item'):
+        """某一类实例的登记表：$data_items / $data_weapons / $data_armors。
 
-    def registration_state(self, iid, standard=None):
+        游戏新增实例时会把克隆体 push 进**对应的那张表**（脚本 0156 的
+        random_item / random_weapon / random_armor），实例的 @id 就是那张表里的
+        下标 —— 所以物品和装备的 @id 是两个互不相干的编号空间，别混用。
+        """
+        table = KIND_TABLE.get(kind) or 'data_items'
+        return self._db(table, DB_FILES.get(table, table + '.rxdata'))
+
+    def item_db_array(self):
+        """旧调用：物品的登记表。"""
+        return self.db_array('item')
+
+    def registration_state(self, iid, standard=None, kind='item'):
         """
         检查实例有没有在 $data_items 里登记 —— 游戏用它判断"能不能使用"：
 
@@ -1995,40 +2117,53 @@ class Doc(object):
               ...
 
         返回 (状态, 说明)：ok / missing / out_of_range / std_mismatch。
+
+        kind = item / weapon / armor —— 三类实例各查各的登记表
+        （$data_items / $data_weapons / $data_armors）。查错表 -> 装备格全被判"没登记"，
+        再点「一键修复异常格」就会把它们按物品表重建（毁装备）。
         """
-        arr = self.item_db_array()
+        table = KIND_TABLE.get(kind) or 'data_items'
+        arr = self.db_array(kind)
         if not isinstance(iid, int) or iid < 1:
             return 'missing', '实例 id 无效（%s）' % iid
         if iid >= len(arr):
-            return 'out_of_range', ('$data_items[%d] 越界（数组只有 %d 项）'
-                                    % (iid, len(arr)))
+            return 'out_of_range', ('$%s[%d] 越界（数组只有 %d 项）'
+                                    % (table, iid, len(arr)))
         t = arr[iid]
         if not isinstance(t, M.ObjNode):
-            return 'missing', '$data_items[%d] 是空的' % iid
+            return 'missing', '$%s[%d] 是空的' % (table, iid)
         if standard is not None and M.value_of(t.get('@standard')) != standard:
-            return 'std_mismatch', ('$data_items[%d] 登记的是模板 %s'
-                                    % (iid, M.value_of(t.get('@standard'))))
+            return 'std_mismatch', ('$%s[%d] 登记的是模板 %s'
+                                    % (table, iid, M.value_of(t.get('@standard'))))
         return 'ok', ''
 
-    def item_registered(self, iid, standard=None):
-        return self.registration_state(iid, standard)[0] == 'ok'
+    def item_registered(self, iid, standard=None, kind='item'):
+        return self.registration_state(iid, standard, kind)[0] == 'ok'
+
+    def next_db_id(self, kind='item'):
+        """下一个登记槽号 = 那张登记表的长度（游戏 random_item/weapon 就这么分配）。"""
+        return len(self.db_array(kind))
 
     def next_item_db_id(self):
-        """下一个登记槽号 = $data_items 的长度（游戏 random_item 就是这么分配）。"""
-        return len(self.item_db_array())
+        """旧调用：物品的登记槽号。"""
+        return self.next_db_id('item')
 
-    def register_item(self, iid, item_node):
+    def register_instance(self, kind, iid, item_node):
         """
-        把物品实例登记进 $data_items[iid]，与游戏 random_item 的行为一致：
+        把实例登记进**对应类别**的表，与游戏 random_item / random_weapon /
+        random_armor 完全一致：
             item.id = $data_items.size
             $data_items.push(item)
-        不登记的话，游戏 `item_can_use?` 直接返回 nil，
-        提示“该物品无法使用！再试也不能用，233333”。
+        不登记（或登记错表）的话：物品那边 `item_can_use?` 判 nil -> “该物品无法使用”，
+        装备/防具这边读不到实例。
         """
-        arr = self.item_db_array()
+        arr = self.db_array(kind)
         copy = E.clone_node(item_node)
         E.ensure_ivar(copy, '@id', int(iid))
-        E.ensure_ivar(copy, '@quality', E.DEFAULT_QUALITY)
+        if kind == 'item':
+            E.ensure_ivar(copy, '@quality', E.DEFAULT_QUALITY)
+        else:
+            E.ensure_ivar(copy, '@identify', 1)      # 装备/防具实例自带鉴定字段
         while len(arr) < iid:
             arr.append(M.NilNode())
         if len(arr) == iid:
@@ -2036,7 +2171,37 @@ class Doc(object):
         else:
             arr[iid] = copy
         self._tpl_dirty = True
+        self._tpl_tables.add(KIND_TABLE.get(kind) or 'data_items')
         return iid
+
+    def register_item(self, iid, item_node):
+        """旧调用：登记物品（kind = item）。"""
+        return self.register_instance('item', iid, item_node)
+
+    def bind_to_classes(self, kind, sid, new_id):
+        """照游戏 random_weapon / random_armor：把新实例的 id 并进职业的
+        @weapon_set / @armor_set（只对"可装备该模板 id"的职业做）。
+
+        不做这一步，角色在游戏里穿这件新装备时 `equippable?` 会判 false。
+        """
+        if kind not in ('weapon', 'armor') or not isinstance(new_id, int):
+            return 0
+        fld = '@weapon_set' if kind == 'weapon' else '@armor_set'
+        arr = self._db('data_classes', 'Classes.rxdata')
+        n = 0
+        for cls_node in arr:
+            if not isinstance(cls_node, M.ObjNode):
+                continue
+            node = cls_node.get(fld)
+            if not isinstance(node, M.ArrayNode):
+                continue
+            vals = [M.value_of(x) for x in node.items]
+            if sid in vals and new_id not in vals:
+                node.items.append(M.IntNode(int(new_id)))
+                n += 1
+        if n:
+            self._classes_dirty = True
+        return n
 
     def pack_slot(self, slot, key='@pack'):
         for r in self.container_slots(key):
@@ -2074,7 +2239,7 @@ class Doc(object):
         return self.next_item_db_id()
 
     def pack_write(self, slot, standard_id, count=1, quality=None,
-                   key='@pack', iid=None):
+                   key='@pack', iid=None, kind='item'):
         """
         把某个容器的第 slot 格写成「模板 id = standard_id，数量 = count，品质 = quality」。
 
@@ -2090,28 +2255,35 @@ class Doc(object):
         arr = self.container_node(key)
         if arr is None:
             raise E.EditError('存档里找不到容器 %s' % key)
-        items = self._db('data_items', 'Items.rxdata')
+        if kind not in KIND_TABLE:
+            kind = 'item'
+        label = KIND_LABEL.get(kind, '物品')
+        table = KIND_TABLE[kind]
+        items = self.db_array(kind)
         if not items:
-            raise E.EditError('拿不到物品模板表：存档里没有 $data_items，'
-                              '游戏目录里也找不到 Items.rxdata。\n'
-                              '（把工具放回游戏目录，或设 XJ_GAME 指向游戏根目录）')
+            raise E.EditError('拿不到%s模板表：$%s 是空的，'
+                              '游戏目录里也找不到 %s。\n'
+                              '（把工具放回游戏目录，或设 XJ_GAME 指向游戏根目录）'
+                              % (label, table,
+                                 DB_FILES.get(table, table + '.rxdata')))
         sid = int(standard_id)
         if not (0 <= sid < len(items)):
-            raise E.EditError('物品 id %s 不存在（可用范围 0 ~ %d）'
-                              % (standard_id, len(items) - 1))
+            raise E.EditError('%s id %s 不存在（可用范围 0 ~ %d）'
+                              % (label, standard_id, len(items) - 1))
         tpl = items[sid]
         if not isinstance(tpl, M.ObjNode):
-            raise E.EditError('物品 id %s 不是物品模板' % sid)
+            raise E.EditError('%s id %s 不是%s模板' % (label, sid, label))
         r = self.pack_slot(slot, key)
         old_std = r['standard'] if (r and isinstance(r['standard'], int)) else None
         old_iid = r['iid'] if (r and isinstance(r['iid'], int)) else None
+        old_kind = r['kind'] if r else 'item'
         if iid:
             new_iid = int(iid)
-        elif old_iid is not None and old_std == sid \
-                and self.item_registered(old_iid, sid):
-            new_iid = old_iid                  # 同一件物品，只改数量/品质
+        elif old_iid is not None and old_std == sid and old_kind == kind \
+                and self.item_registered(old_iid, sid, kind):
+            new_iid = old_iid                  # 同一件东西，只改数量/品质
         else:
-            new_iid = self.next_item_db_id()   # 换模板 / 新增 -> 新登记槽
+            new_iid = self.next_db_id(kind)    # 换模板 / 新增 -> 新登记槽
         count = int(count)
         if count < 1:
             count = 1
@@ -2119,26 +2291,32 @@ class Doc(object):
         if q < 1:
             q = E.DEFAULT_QUALITY
         cell = E.make_pack_entry(tpl, count, new_instance_id=new_iid,
-                                 standard_id=sid, quality=q)
+                                 standard_id=sid, quality=q,
+                                 flag_identify=(kind != 'item'))
         self.begin_edit().set_array_element(arr, slot, cell)
-        self.register_item(new_iid, cell.items[0])
+        self.register_instance(kind, new_iid, cell.items[0])
+        if kind in ('weapon', 'armor'):
+            self.bind_to_classes(kind, sid, new_iid)
         self._touch_pack(key)
         return {'slot': slot, 'standard': sid, 'count': count, 'iid': new_iid,
-                'quality': q, 'template_name': self.item_name(sid),
+                'quality': q if kind == 'item' else None,
+                'kind': kind, 'kind_label': label,
+                'template_name': self.template_name(kind, sid),
                 'key': key, 'registered': True}
 
     # 兼容旧调用（测试脚本与界面用的名字）
-    def pack_add(self, slot, standard_id, count=1, quality=None, key='@pack'):
-        return self.pack_write(slot, standard_id, count, quality, key)
+    def pack_add(self, slot, standard_id, count=1, quality=None, key='@pack',
+                 kind='item'):
+        return self.pack_write(slot, standard_id, count, quality, key, kind=kind)
 
     def pack_set_template(self, slot, standard_id, count=None, quality=None,
-                          key='@pack'):
+                          key='@pack', kind='item'):
         r = self.pack_slot(slot, key)
         if r is None:
             raise E.EditError('第 %d 格不存在' % slot)
         if count is None:
             count = r['count'] or 1
-        return self.pack_write(slot, standard_id, count, quality, key)
+        return self.pack_write(slot, standard_id, count, quality, key, kind=kind)
 
     def pack_scan_bad(self):
         """找出"游戏里用不了"的异常格子（逐个容器扫描）。"""
@@ -2148,8 +2326,12 @@ class Doc(object):
                 if r['item'] is None:
                     continue
                 why = []
-                if E.find_ivar(r['item'], '@quality') is None:
-                    why.append('缺品质字段（游戏会当成 0）')
+                if r['kind'] == 'item':
+                    if E.find_ivar(r['item'], '@quality') is None:
+                        why.append('缺品质字段（游戏会当成 0）')
+                elif E.find_ivar(r['item'], '@identify') is None:
+                    # 装备/防具实例自带的是 @identify（鉴定），没有 @quality
+                    why.append('缺鉴定字段 @identify')
                 if not isinstance(r['standard'], int):
                     why.append('缺 @standard，认不出模板')
                 if not isinstance(r['count'], int) or r['count'] < 1:
@@ -2162,13 +2344,14 @@ class Doc(object):
                     if not isinstance(deref(node), M.StrNode):
                         why.append('%s 不是字符串（对象链接错位）' % fld)
                         break
-                # 没在 $data_items 登记 -> 游戏判定"该物品无法使用"
-                st, msg = self.registration_state(r['iid'], r['standard'])
+                # 没在**对应类别**的登记表里 -> 游戏认不出这件东西
+                st, msg = self.registration_state(r['iid'], r['standard'], r['kind'])
                 if st != 'ok':
                     why.append('没登记（%s）' % msg)
                 if why:
                     bad.append({'slot': r['slot'], 'key': key, 'label': label,
                                 'name': r['name'], 'standard': r['standard'],
+                                'kind': r['kind'], 'kind_label': r['kind_label'],
                                 'why': '、'.join(why)})
         return bad
 
@@ -2180,7 +2363,8 @@ class Doc(object):
                 continue          # 连模板都不知道是哪件，不敢动
             r = self.pack_slot(b['slot'], b['key'])
             q = r['quality'] if isinstance(r['quality'], int) and r['quality'] > 0 else None
-            self.pack_write(b['slot'], b['standard'], r['count'], q, b['key'])
+            self.pack_write(b['slot'], b['standard'], r['count'], q, b['key'],
+                            kind=b.get('kind') or r['kind'])
             fixed.append((b['key'], b['slot']))
         return fixed
 
@@ -2231,12 +2415,24 @@ class Doc(object):
             return None
         pe = self.begin_edit()
         if self._tpl_dirty:
-            # $data_items 里追加了登记项 -> 整条重写（对象链接全部展开，编号自洽）
-            tpl = self.node('data_items')
-            self._check_links(tpl)
-            n = len(pe.replace_tree(tpl))
-            if self.log:
-                self.log('已整条重写 $data_items（%d 字节）：新增物品已登记' % n)
+            # 登记表里追加了实例 -> 整条重写（对象链接全部展开，编号自洽）
+            for table in sorted(self._tpl_tables or {'data_items'}):
+                tpl = self.node(table)
+                if tpl is None:
+                    continue
+                self._check_links(tpl)
+                n = len(pe.replace_tree(tpl))
+                if self.log:
+                    self.log('已整条重写 $%s（%d 字节）：新增实例已登记' % (table, n))
+        if self._classes_dirty:
+            # 新装备/防具并进了职业的 weapon_set / armor_set -> 整条重写
+            nd = self.node('data_classes')
+            if nd is not None:
+                self._check_links(nd)
+                n = len(pe.replace_tree(nd))
+                if self.log:
+                    self.log('已整条重写 $data_classes（%d 字节）：'
+                             '新装备已并进职业可装备表' % n)
         if self._actors_dirty:
             # @skills 数组长度变了 -> 两个顶层对象（角色表/队伍）整条重写，
             # 否则数组后面的 '@N' 链接会因对象数变化而错位
@@ -2303,7 +2499,9 @@ class Doc(object):
         self._pe = None
         self._pack_dirty = False
         self._tpl_dirty = False
+        self._tpl_tables = set()
         self._actors_dirty = False
+        self._classes_dirty = False
 
     # ---------------- 导出 ----------------
     def export_text(self, max_items=200):

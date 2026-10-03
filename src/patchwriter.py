@@ -290,7 +290,7 @@ def clone_node(node, _depth=0):
 
 
 def make_pack_entry(item_template, count, new_instance_id=None,
-                    standard_id=None, quality=None):
+                    standard_id=None, quality=None, flag_identify=False):
     """
     构造 @pack 的一格：Array[ 物品实例, 数量 ]
 
@@ -304,6 +304,10 @@ def make_pack_entry(item_template, count, new_instance_id=None,
     没指定品质就不补这个字段，游戏读到 nil 按 0 处理，于是提示
     "该物品无法使用"。所以现在**始终**写入 @quality（默认 100）。
     数量同理兜底：0 个物品在游戏里点不动，最小写 1。
+
+    flag_identify=True 表示要写的是**装备/防具实例**（RPG::Weapon / RPG::Armor）：
+    它们没有 @quality，自带的是 @identify（鉴定，0/1；游戏 random_weapon /
+    random_armor 生成实例时补的就是它）。写错字段游戏读不到。
     """
     inst = clone_node(item_template)
     if not isinstance(inst, M.ObjNode):
@@ -325,7 +329,10 @@ def make_pack_entry(item_template, count, new_instance_id=None,
         ensure('@id', new_instance_id)
     if standard_id is not None:
         ensure('@standard', standard_id)
-    ensure('@quality', quality)          # 必须写：缺了游戏判定品质 0 -> 无法使用
+    if flag_identify:
+        ensure('@identify', 1)            # 装备/防具实例：补鉴定字段，不写 @quality
+    else:
+        ensure('@quality', quality)       # 必须写：缺了游戏判定品质 0 -> 无法使用
     return M.ArrayNode([inst, M.IntNode(count)])
 
 
