@@ -65,7 +65,7 @@ def stage_assets():
 
 
 def notes_text():
-    """CHANGELOG 里本版本的那一段 + 下载说明。"""
+    """CHANGELOG 里本版本的那一段 + 两行下载说明（别啰嗦，附件本来就在 Assets 顶部）。"""
     body = ''
     path = os.path.join(ROOT, 'CHANGELOG.md')
     if os.path.exists(path):
@@ -75,15 +75,22 @@ def notes_text():
             nxt = text.find('\n## ', head + 1)
             body = text[head:nxt if nxt > 0 else len(text)].rstrip()
     zipname = b.RELEASE_ASSETS[0][1]
-    extra = (
-        '## 下载 / 用法\n\n'
-        '**只下这一个附件就够了**：`%s`\n\n'
-        '```\n%s\n```\n\n'
-        '解压到任意目录（**别只把 exe 拖出来**），双击 `%s` 即可，免安装、不用再单独下依赖。\n\n'
-        '> 附件名只能是 ASCII（GitHub 会剔除中文）；包内的文件名保持中文，改名不影响使用。\n'
-        % (zipname, '\n'.join(b.ZIP_MEMBERS), b.EXE_NAME + '.exe')
+    # 正文 = 更新总结打头（去掉 “## vX.Y.Z · 日期” 标题行），尾部免责 + 一行下载说明
+    lines = body.split('\n')
+    while lines and (lines[0].startswith('## ') or not lines[0].strip()):
+        lines.pop(0)
+    summary = '\n'.join(lines).strip()
+    while summary.endswith('---'):
+        summary = summary[:-3].rstrip()
+    tail = (
+        '\n---\n\n'
+        '> ⚠️ 使用前请先自己备份 `Audio\\BGM\\sy.ogg`。本工具是第三方工具，'
+        '与游戏作者无关；游戏本体及其素材版权归原作者所有。\n\n'
+        '下载：只下 Assets 里的 **`%s`**（唯一附件），解压后双击 `%s` 即可；'
+        '别只把 exe 单独拖出来，依赖要跟它在同一目录。\n'
+        % (zipname, b.EXE_NAME + '.exe')
     )
-    return extra + ('\n---\n\n' + body + '\n' if body else '')
+    return (summary + '\n' if summary else '') + tail
 
 
 def main():
