@@ -112,8 +112,11 @@ def main():
     tp = {k: doc.templates(k) for k in ('item', 'weapon', 'armor')}
     for k, label in (('item', '物品'), ('weapon', '装备'), ('armor', '防具')):
         check('类别模板表 %s 取得到（%d 项）' % (label, len(tp[k])), len(tp[k]) > 0)
+    # 1.5.1：宠物武器（element 98）按行为是物品 —— 装备类不再列出、物品类列出
     wid = [i for i, n in tp['weapon'] if n == '泡泡兜兜']
-    check('装备表里有「泡泡兜兜」', wid == [BUBBLE], 'id=%s' % wid)
+    check('装备表里不再列出「泡泡兜兜」（归物品类）', wid == [], 'id=%s' % wid)
+    iid_ = [i for i, n in tp['item'] if n == '泡泡兜兜']
+    check('物品表里列出了「泡泡兜兜」', iid_ == [BUBBLE], 'id=%s' % iid_)
     aid = [i for i, n in tp['armor'] if n == '珍珠链']
     check('防具表里有「珍珠链」', PEARL in aid, 'id=%s' % aid[:4])
 
@@ -135,8 +138,11 @@ def main():
     # ---------- C. 写装备：泡泡兜兜 ----------
     info = doc.pack_write(s_w, BUBBLE, 1, None, '@pack', kind='weapon')
     r = doc.pack_slot(s_w, '@pack')
-    check('写入装备：类是 Weapon', r['kind'] == 'weapon' and r['kind_label'] == '装备',
-          'kind=%s' % r['kind'])
+    # 1.5.1：泡泡兜兜是宠物武器（element 98）—— 类列/标签按"物品"展示，
+    # 实例仍是 RPG::Weapon、登记仍在 $data_weapons
+    check('写入装备：类是 Weapon（标签按物品展示）',
+          r['kind'] == 'weapon' and r['kind_label'] == '物品',
+          'kind=%s label=%s' % (r['kind'], r['kind_label']))
     check('写入装备：模板名 = 泡泡兜兜', r['template_name'] == '泡泡兜兜',
           r['template_name'])
     check('写入装备：显示名不带 ",HP,SP,等级"', r['name'] == '泡泡兜兜',

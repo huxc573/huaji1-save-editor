@@ -50,6 +50,14 @@ KIND_TABLE = {k: t for k, _c, t, _l in ITEM_KINDS}
 KIND_LABEL = {k: l for k, _c, _t, l in ITEM_KINDS}
 KIND_CLS = {k: c for k, c, _t, _l in ITEM_KINDS}
 
+#: 宠物武器（脚本 0162）：RPG::Weapon 且 element_set 含 98 —— 右键「使用」时
+#: 要求有参战召唤兽，然后 baby.equip(2, 实例.id) 并把背包格置 nil（用一次消失）。
+#: 所以泡泡兜兜 / 灵石 / 糖果这类东西**按行为是物品，不是装备**：
+#: 界面一律按「物品」展示；但实例的 Ruby 类仍是 RPG::Weapon、必须登记进
+#: $data_weapons（游戏 baby.equip 走 $data_weapons[实例.id] 解析），写入时
+#: pack_write() 会自动把物品类的宠物武器路由回装备表。
+PET_WEAPON_ELEMENT = 98
+
 # 项目元信息（界面、文档、打包都用它，只维护这一处）
 APP_NAME = '画迹1：落日情缘 存档工具'
 APP_VERSION = '1.5.0'
@@ -991,27 +999,70 @@ class Doc(object):
         return '?'
 
     def template_name(self, kind, i):
-        """按"实例类别"取模板名（kind = item / weapon / armor）。"""
+        """按"实例类别"取模板名（kind = item / weapon / armor）。
+
+        物品类里查不到名字、而该编号是宠物武器模板时，回落到装备表
+        （泡泡兜兜 468 在 $data_weapons，物品表同一编号是空位）。
+        """
         if kind == 'weapon':
             return self.weapon_name(i)
         if kind == 'armor':
             return self.armor_name(i)
-        return self.item_name(i)
+        nm = self.item_name(i)
+        if (not nm or nm == '?') and self.is_pet_weapon(i):
+            nm = self.weapon_name(i)
+        return nm
+
+    def _pet_weapon_ids(self):
+        """宠物武器模板 id 集合（$data_weapons 里 element_set 含 98 的对象）。"""
+        cache = getattr(self, '_pet_ids', None)
+        if cache is None:
+            cache = set()
+            arr = self.db_array('weapon')
+            for sid in range(len(arr)):
+                nd = deref(arr[sid])
+                if not (isinstance(nd, M.ObjNode) and nd.cls == 'RPG::Weapon'):
+                    continue
+                es = nd.get('@element_set')
+                if isinstance(es, M.ArrayNode) and \
+                        PET_WEAPON_ELEMENT in [M.value_of(x) for x in es.items]:
+                    cache.add(sid)
+            self._pet_ids = cache
+        return cache
+
+    def is_pet_weapon(self, sid):
+        """该编号是否宠物武器模板（泡泡兜兜 / 灵石 / 糖果，element 98）。"""
+        try:
+            return int(sid) in self._pet_weapon_ids()
+        except (TypeError, ValueError):
+            return False
+
+    @staticmethod
+    def _tpl_has_name(nd):
+        """模板对象是否带着有效名字（无名占位模板不算，见 pack_write 路由）。"""
+        if not isinstance(nd, M.ObjNode):
+            return False
+        return bool(stext(nd.get('@name'), ''))
 
     def template_tip(self, kind, i):
         """下拉悬停 / 表格提示用：模板名 + 类别 + @description。
 
         「说明」= 模板的 @description（装备名被游戏重载成 "名字,HP,SP,等级"，
         名字走 template_name 取前半段）。
+        物品类 + 宠物武器时说明取自装备表（物品表同编号是空位）。
         """
         nm = self.template_name(kind, i)
         head = '%s ｜ %s id %d' % (nm, KIND_LABEL.get(kind, '物品'), i)
-        desc = ''
         arr = self.db_array(kind)
-        if isinstance(i, int) and 0 <= i < len(arr):
-            nd = deref(arr[i])
-            if isinstance(nd, M.ObjNode):
-                desc = stext(nd.get('@description'), '')
+        nd = deref(arr[i]) if isinstance(i, int) and 0 <= i < len(arr) else None
+        # 物品类 + 该编号是无名占位（如 items[468]）且是宠物武器时，说明取装备表
+        if kind == 'item' and not self._tpl_has_name(nd) \
+                and self.is_pet_weapon(i):
+            arr = self.db_array('weapon')
+            nd = deref(arr[i]) if isinstance(i, int) and 0 <= i < len(arr) \
+                else None
+        desc = stext(nd.get('@description'), '') \
+            if isinstance(nd, M.ObjNode) else ''
         if desc:
             return '%s\n\n%s' % (head, desc)
         return head
@@ -1689,9 +1740,14 @@ class Doc(object):
                     rec['item'] = item
                     kind = self.kind_of(item)
                     rec['kind'] = kind
-                    rec['kind_label'] = KIND_LABEL.get(kind, '物品')
                     std = vof(item.get('@standard'))
                     rec['standard'] = std
+                    # 宠物武器（泡泡兜兜/灵石/糖果）按行为是物品：界面展示成
+                    # 物品；实例本身仍是 RPG::Weapon（登记/修复仍走装备表）
+                    if kind == 'weapon' and self.is_pet_weapon(std):
+                        rec['kind_label'] = '物品'
+                    else:
+                        rec['kind_label'] = KIND_LABEL.get(kind, '物品')
                     rec['iid'] = vof(item.get('@id'))
                     nm = stext(item.get('@name'), '?')
                     rec['name_raw'] = nm
@@ -1747,11 +1803,19 @@ class Doc(object):
         名字一律先查内嵌 db_table（别人的存档快照可能比游戏版本旧），
         id 范围取"登记表"与"内嵌表"的较大值 —— 免得漏掉新版追加的模板。
         kind = item / weapon / armor，对应 $data_items / $data_weapons / $data_armors。
+
+        宠物武器（泡泡兜兜 / 灵石 / 糖果，element 98）**按行为是物品**：
+        在物品类里列出、装备类里排除（见 PET_WEAPON_ELEMENT 注释）。
         """
         table = KIND_TABLE.get(kind) or 'data_items'
         n = max(len(self.db_array(kind)), len(self._embed(table, 'NAMES')))
+        pet = self._pet_weapon_ids()
+        if kind == 'item' and pet:
+            n = max(n, max(pet) + 1)
         out = []
         for i in range(1, n):
+            if kind == 'weapon' and i in pet:
+                continue
             nm = self.template_name(kind, i)
             if nm and nm != '?':
                 out.append((i, nm))
@@ -2172,6 +2236,9 @@ class Doc(object):
             arr[iid] = copy
         self._tpl_dirty = True
         self._tpl_tables.add(KIND_TABLE.get(kind) or 'data_items')
+        if kind == 'weapon':
+            # 新登记的装备实例可能是宠物武器（克隆自带 element 98），别用旧缓存
+            self._pet_ids = None
         return iid
 
     def register_item(self, iid, item_node):
@@ -2260,13 +2327,24 @@ class Doc(object):
         label = KIND_LABEL.get(kind, '物品')
         table = KIND_TABLE[kind]
         items = self.db_array(kind)
+        sid = int(standard_id)
+        if kind == 'item' and items and self.is_pet_weapon(sid):
+            # 物品类里写宠物武器（泡泡兜兜/灵石/糖果）：实例必须是 RPG::Weapon
+            # 并登记进 $data_weapons（游戏 baby.equip 走 $data_weapons[id]）。
+            # 物品表同一编号有"带名字的真模板"时以物品为准，不误伤
+            #（⚠ 无名占位模板不算 —— $data_items[468] 就是个空名占位）。
+            it = deref(items[sid]) if sid < len(items) else None
+            if not self._tpl_has_name(it):
+                kind = 'weapon'
+                label = KIND_LABEL[kind]
+                table = KIND_TABLE[kind]
+                items = self.db_array(kind)
         if not items:
             raise E.EditError('拿不到%s模板表：$%s 是空的，'
                               '游戏目录里也找不到 %s。\n'
                               '（把工具放回游戏目录，或设 XJ_GAME 指向游戏根目录）'
                               % (label, table,
                                  DB_FILES.get(table, table + '.rxdata')))
-        sid = int(standard_id)
         if not (0 <= sid < len(items)):
             raise E.EditError('%s id %s 不存在（可用范围 0 ~ %d）'
                               % (label, standard_id, len(items) - 1))

@@ -149,14 +149,17 @@ def _run(root):
     root.update()
     vals = list(app.cb_tpl['values'])
     print('类别=物品 搜「泡泡兜兜」：%s' % vals)
-    ok_x = bool(vals) and any('（装备）' in v for v in vals)
-    print('跨类搜索命中装备模板（条目带类别后缀）：%s' % ('OK' if ok_x else '失败'))
+    # 1.5.1：泡泡兜兜是宠物武器（element 98）—— 按行为是物品，列在物品类
+    ok_x = bool(vals) and any('（物品）' in v and v.startswith('468 |')
+                              for v in vals)
+    print('跨类搜索命中宠物武器（条目按物品列出）：%s' % ('OK' if ok_x else '失败'))
     if vals:
         app.var_pack_std.set(vals[0])
         app.on_tpl_pick()
         root.update()
-    ok_sw = app.cur_tpl_kind() == 'weapon'
-    print('选中装备模板后自动把类别切到 weapon：%s' % ('OK' if ok_sw else '失败'))
+    ok_sw = app.cur_tpl_kind() == 'item'
+    print('选中宠物武器后类别为物品（写入自动路由装备表）：%s'
+          % ('OK' if ok_sw else '失败'))
     ok_info = '跨三类命中' in app.lb_tpl_info.cget('text')
     print('提示行写明「跨三类命中」：%s' % ('OK' if ok_info else '失败'))
     app.var_tpl_search.set('')
@@ -251,7 +254,7 @@ def _run(root):
               % ('OK' if _hit and all(_hit) and
                  len(set(_hit)) == len(_hit) else '失败'))
         print('提示正文 = 名字 + 类别 + 游戏说明：%s'
-              % ('OK' if ('泡泡兜兜' in _tip0 and '装备 id 468' in _tip0
+              % ('OK' if ('泡泡兜兜' in _tip0 and '物品 id 468' in _tip0
                           and '王母娘娘' in _tip0) else '失败'))
         root.tk.call('event', 'generate', _lb, '<Leave>')
         root.update()

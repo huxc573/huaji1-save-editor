@@ -780,14 +780,11 @@ class App(object):
         ttk.Button(g4, text='删除该格', command=self.pack_delete).grid(
             row=0, column=7, rowspan=3, sticky='ns')
         ttk.Label(g4, foreground='#888', justify='left',
-                  text='① 搜索是跨三类的：搜到别的类别会自动切过去，不必先手选「类别」；\n'
-                       '   「类别」= 按实例的 Ruby 类决定查哪张表，和上面的容器'
-                       '（道具 @pack / 行囊 @wallet / 备用 @talisman）是两回事 ——\n'
-                       '   装备/防具平时也装在 @pack 里，所以会出现在「道具」页；\n'
-                       '② 写入时按类别登记进 $data_items / $data_weapons / $data_armors'
-                       '（游戏靠它判断认不认），并自动分配实例 id；\n'
-                       '③ 装备/防具还会把新实例 id 并进职业的可装备表（照游戏 random_weapon）；\n'
-                       '   “登记”列 ✓ = 游戏认得；数量<1 按 1 算，品质<1 按 100 算。'
+                  text='① 搜索是跨三类的：搜到别的类别会自动切过去，不必先手选「类别」；「类别」决定查哪张表，\n'
+                       '   和容器（道具 @pack / 行囊 @wallet / 备用 @talisman）是两回事：装备/防具也装在 @pack；\n'
+                       '② 写入时按类别登记进 $data_items / $data_weapons / $data_armors，自动分配实例 id，\n'
+                       '   装备/防具还会并进职业可装备表（照游戏 random_weapon）；泡泡兜兜/灵石/糖果按物品列出，\n'
+                       '   写入自动登记进 $data_weapons；“登记”列 ✓ = 游戏认得；数量<1 按 1 算，品质<1 按 100 算。'
                   ).grid(row=3, column=0, columnspan=8, sticky='w', pady=(6, 0))
         ttk.Button(g4, text='一键修复异常格', command=self.pack_fix_bad).grid(
             row=4, column=6, columnspan=2, sticky='w', pady=(4, 0))
@@ -2237,9 +2234,18 @@ class App(object):
             return
         self.var_pack_count.set(str(r['count'] or 1))
         self.var_pack_quality.set(str(r['quality'] if r['quality'] else 100))
+        if getattr(self, '_picked_tpl', False):
+            # ★ 用户刚在下拉里选好了模板：别再用这一格的类别/模板把它冲掉。
+            #   （1.5.0 的 bug：先选「泡泡兜兜（装备）」再点某行（尤其空格，
+            #   空格默认类别是"物品"），类别被顶回去 → 写入按物品表 → 变 ?/别的物品）
+            return
         # 选中装备/防具格时，把"类别"跟着切过去 —— 否则下拉框里根本列不到它
-        if r['kind'] != self.cur_tpl_kind():
-            self.var_tpl_kind.set(r['kind'])
+        k = r['kind']
+        if (k == 'weapon' and isinstance(r['standard'], int)
+                and self.doc.is_pet_weapon(r['standard'])):
+            k = 'item'    # 宠物武器按物品类展示；写入时自动路由回装备表
+        if k != self.cur_tpl_kind():
+            self.var_tpl_kind.set(k)
             self.refresh_templates()
         if isinstance(r['standard'], int):
             self.var_pack_std.set('%d | %s' % (r['standard'], r['template_name']))
@@ -2290,6 +2296,7 @@ class App(object):
             kind = self.cur_tpl_kind()
             info = self.doc.pack_write(slot, sid, cnt, qty, key, kind=kind)
             self.mark_dirty()
+            self._picked_tpl = False    # 写入完成，恢复"点行跟随行类别"
             self.pack_refresh(slot)
             self.set_status(
                 '%s%s第 %d 格：%s（%s id %d）× %d%s，实例 id %d（已登记进 $%s）'
@@ -2332,6 +2339,7 @@ class App(object):
 
     def on_tpl_kind_change(self):
         """切换"物品 / 装备 / 防具"：重新取那张模板表并清空搜索。"""
+        self._picked_tpl = False    # 手动换类别 = 明确的新意图，解除模板锁定
         self.var_tpl_search.set('')
         self.refresh_templates()
 
@@ -2413,6 +2421,9 @@ class App(object):
         self.hide_tip()
         s = self.var_pack_std.get().strip()
         k = getattr(self, '_tpl_pick', {}).get(s)
+        # 记住"用户选过模板"：之后点一览表的行不再用行类别冲掉这个选择
+        # （写入成功后清掉，恢复"点行跟随行类别"）
+        self._picked_tpl = bool(k)
         if k and k != self.cur_tpl_kind():
             self.var_tpl_kind.set(k)
             self.refresh_templates()
